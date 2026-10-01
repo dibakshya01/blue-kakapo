@@ -1,0 +1,68 @@
+# ---- Secrets & local config (never commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+*.local.yaml
+*.local.yml
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.hypothesis/
+
+# ---- Node / frontend ----
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+*.tsbuildinfo
+dist-ssr/
+.vite/
+
+# ---- Data, models, memory stores (local runtime artifacts) ----
+*.sqlite
+*.sqlite3
+*.db
+data/
+!data/.gitkeep
+models/
+*.gguf
+.ollama/
+case-memory/
+blue-kakapo-memory/
+
+# ---- Launch copy (drafted launch posts stay out of the public repo) ----
+LAUNCH.md
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---- Logs & tmp ----
+*.log
+logs/
+tmp/
+.cache/
