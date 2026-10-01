@@ -30,7 +30,7 @@
 ## 1. Goals & non-goals
 
 **Goals**
-- G1. Autonomously perform **Tier-1 triage** on alerts from heterogeneous sources: dedup, normalize (OCSF), enrich, reason, assign a calibrated verdict (benign / false-positive / suspicious / escalate) **with cited evidence**.
+- G1. Autonomously perform **Tier-1 triage** on alerts from heterogeneous sources: dedup, normalize (OCSF), enrich, reason, and assign a **verdict class** (`benign / false_positive / suspicious / malicious / inconclusive`) plus a **routing disposition** (`auto_close / escalate / await_approval`) **with cited evidence** and a confidence score (FR-31).
 - G2. Ship a **swarm of specialized agents + an orchestrator/superagent**, built in staged milestones. The **deeply-built core-5 triage wedge** (L1, L2, INTEL, FUSION, RESP) + a documented **Agent SDK/interface** is the first-cut gate; the **remaining 9 agents** (WATCH, HUNT, DET, VULN, INSIDER, COMMS, RPT, MAINT, MGR) are built in subsequent milestones, each to the **same depth bar** (§4.6 defines "deeply implemented"). All 14 are in scope; none is a stub at release of its milestone.
 - G3. Be **self-hostable and in-network**: one-command localhost, deployable to K8s/air-gap; all data stays on the user's infrastructure.
 - G4. Be **model-agnostic** (Anthropic / OpenAI / Azure / local Ollama/vLLM), switchable anytime, with an Ollama bootstrap and a deterministic **offline mode** needing no key.
@@ -76,11 +76,11 @@ Each FR is verifiable and maps to a stage (§5). Severity: **[MUST]** (first-cut
 **Orchestration kernel**
 - FR-4 [MUST] A typed, deterministic, **checkpointed state machine** drives each Case through a lifecycle (`new → triaging → investigating → awaiting_approval → responding → resolved/escalated/closed`), persisting state after every node. Every object carries `tenant_id`.
 - FR-5 [MUST] Support **human-in-the-loop interrupts**: a run can suspend awaiting approval/input and **resume deterministically, re-entering the exact node** with restored typed state.
-- FR-6 [MUST] Every state transition, tool call, model call, agent decision, and human action writes a **hash-chained, append-only ledger entry** (who/what/when/why, correlation + trace IDs, model id+digest, prompt hash, input/output refs, per-call token+cost). PII is stored via crypto-shredding/tokenization (FR-44), not inline.
+- FR-6 [MUST] Every state transition, tool call, model call, agent decision, and human action writes a **hash-chained, append-only ledger entry** (who/what/when/why, correlation + trace IDs, model id+digest, prompt hash, input/output refs, per-call token+cost). PII is stored via crypto-shredding/tokenization (FR-44), not inline; **all retained hashes/digests are computed over ciphertext or tokenized refs, never over raw PII plaintext** (so surviving hashes aren't brute-forceable after a shred). The ledger is **time-partitioned** with a configurable **retention/archival** policy (hot in Postgres → cold/archived), and ledger write-volume + pruning is covered by the scale test (FR-34).
 - FR-7 [MUST] A Case run is **replayable from the ledger**: the decision path and evidence are reconstructable, and ledger integrity is cryptographically verifiable. (This is replay-of-the-record, not a claim that an LLM re-run yields identical tokens.)
 
 **LLM provider gateway**
-- FR-8 [MUST] A provider gateway exposes one interface over adapters: **Anthropic**, **OpenAI-compatible** (covers OpenAI/Azure/Ollama/vLLM/LM Studio/OpenRouter), **Ollama-native**, and a deterministic **mock/offline** provider.
+- FR-8 [MUST] A provider gateway exposes one interface over adapters for **generation, embeddings, and reranking**: **Anthropic**, **OpenAI-compatible** (covers OpenAI/Azure/Ollama/vLLM/LM Studio/OpenRouter), **Ollama-native**, and a deterministic **mock/offline** provider. Embeddings + a reranker must have **local/offline variants** (e.g. a local embedding model + bge-reranker via Ollama/TEI) so memory retrieval works air-gapped.
 - FR-9 [MUST] The active provider/model is **configurable and switchable at runtime** (config + UI) without restart; per-agent model overrides allowed.
 - FR-10 [MUST] **Offline mode** runs the full triage pipeline with no external key (mock provider + deterministic enrichment), so localhost works instantly. Offline-mode verdicts are explicitly labeled non-inferential (they test the *pipeline*, not model quality).
 - FR-11 [SHOULD] **Ollama bootstrap**: a CLI/UI action pulls a recommended local model and warms it; progress streamed.
@@ -105,13 +105,13 @@ Each FR is verifiable and maps to a stage (§5). Severity: **[MUST]** (first-cut
 **Memory subsystem**
 - FR-25 [MUST] Memory backends: **folder** (embedded, file-based, for the UI-linked local folder) and **pgvector** are first-cut; **external** (Qdrant/DB/VM) ships behind the same interface at a later stage. Configurable per tenant.
 - FR-26 [MUST] On Case resolution, store a **compacted case record** (features, steps, verdict, outcome, analyst notes) + metadata (tenant, ATT&CK technique, asset, severity) + **embedding model id/version**.
-- FR-27 [MUST] Retrieve similar past cases via **hybrid search (dense + BM25) + reranking** with metadata filters (tenant-scoped).
+- FR-27 [MUST] Retrieve similar past cases via **hybrid search (dense pgvector + lexical) + reranking** with tenant-scoped metadata filters. Lexical scoring uses a named mechanism — **ParadeDB/pg_search (true BM25)** where available, otherwise Postgres FTS `ts_rank` as a documented approximation (not called "BM25"); the reranker uses the gateway's local/offline variant (FR-8).
 - FR-28 [MUST] Memory use is **opt-in per case** (toggle honored); a local folder can be created/linked **from the UI**.
 - FR-29 [MUST] Memory-poisoning defenses (ASI06): every record carries **provenance + a trust tier**; agent-authored memories are **quarantined** (not retrievable for decisioning until promoted); retrieval **down-weights** low-trust/aged records (decay). A changed embedding model triggers a **re-embed migration** (version mismatch is detected, not silently mixed).
 
 **Agents (see §4.6 for each; "deeply implemented" defined there)**
 - FR-30 [MUST] Implement the **core-5** (L1, L2, INTEL, FUSION, RESP) + orchestrator deeply, plus a documented **Agent SDK** that the remaining agents implement. Each agent: defined triggers, typed inputs/outputs, declared tools, bounded LLM reasoning, deterministic-first enrichment, confidence output, explicit **autonomy level** (read-only / propose / act-on-approval), and per-agent acceptance criteria.
-- FR-31 [MUST] L1 produces a triage verdict with **cited evidence** and a calibrated confidence score; FP-closure requires evidence, is logged, and is reversible (re-openable).
+- FR-31 [MUST] L1 produces a **verdict class** (`benign | false_positive | suspicious | malicious | inconclusive`) — kept distinct from the **disposition/routing action** (`auto_close | escalate | await_approval`) for clean metrics — with **cited evidence** and a confidence score **whose calibration the eval harness measures** (temperature/Platt/isotonic against the eval set; we do not assert raw LLM self-confidence is calibrated). FP-closure requires evidence, is logged, and is reversible (re-openable).
 - FR-32 [MUST] RESP executes containment **only** via Guardian + human approval; supports dry-run and reversal.
 - FR-33 [MUST (its stage)] MGR tracks **regulatory clocks** (DORA/NIS2/GDPR/SEC) per qualifying case and flags deadlines.
 
@@ -120,7 +120,7 @@ Each FR is verifiable and maps to a stage (§5). Severity: **[MUST]** (first-cut
 - FR-35 [MUST] Record **per-case token and cost** in the ledger and expose **cost-per-case** in metrics and the eval harness (backs the "predictable cost" claim).
 
 **AuthN/Z, multi-tenancy, secrets**
-- FR-36 [MUST] Local admin auth for localhost from S-enterprise's predecessor; **OIDC** SSO [MUST-ENT]; **SAML** SSO + **SCIM** provisioning/deprovisioning [MUST-ENT]; **MFA/passkeys** [SHOULD].
+- FR-36 [MUST] Local admin auth for localhost (available from S7); **OIDC** SSO [MUST-ENT]; **SAML** SSO + **SCIM** provisioning/deprovisioning [MUST-ENT]; **MFA/passkeys** [SHOULD].
 - FR-37 [MUST] Fine-grained **per-action, per-asset, per-tenant** authorization (RBAC/ABAC); a low-privilege role cannot approve/execute containment.
 - FR-38 [MUST] **Secrets** via OpenBao/Vault (or encrypted local store for localhost); connector creds never in images/logs; injected at runtime; rotatable.
 - FR-39 [MUST] **Multi-tenant isolation**: `tenant_id` is enforced across data access, authz, memory retrieval, connector-credential scoping, and ledger partitioning. (Carried from S1; hardened at the enterprise stage.)
@@ -132,7 +132,7 @@ Each FR is verifiable and maps to a stage (§5). Severity: **[MUST]** (first-cut
 
 **Evaluation, privacy & observability**
 - FR-43 [MUST] An **evaluation harness** runs the triage pipeline against labeled datasets and reports precision, recall, **false-negative rate**, calibration, and **cost-per-case**. Published numbers are produced by a **named, pinned model** and are reproducible; the **bundled synthetic dataset** has documented construction/labeling/coverage and its numbers are labeled an **illustrative floor, not a real-world claim**. CI runs the harness *mechanics* on deterministic fixtures (not to publish accuracy).
-- FR-44 [MUST] **Erasure-respecting storage**: alert/case PII is stored encrypted with **per-record keys** (crypto-shredding) and/or tokenized, so a GDPR erasure request destroys the key/token mapping while the hash-chained ledger stays verifiable over hashes/ciphertext. An erasure API exists and is tested.
+- FR-44 [MUST] **Erasure-respecting storage**: alert/case PII is stored encrypted with **per-record keys** (crypto-shredding) and/or tokenized, so a GDPR erasure request destroys the key/token mapping while the hash-chained ledger stays verifiable over hashes/ciphertext. Per-record keys live in the **secrets store (OpenBao) or a dedicated keystore**, and key destruction must be **irreversible including backups** (a key-DB backup must not silently undo an erasure — documented backup/rotation policy). An erasure API exists and is tested.
 - FR-45 [MUST] **OpenTelemetry** traces/logs/metrics; structured JSON logs; health/readiness endpoints.
 - FR-46 [SHOULD] **Ledger external anchoring**: optionally anchor periodic ledger checkpoints to WORM/object-lock storage so tampering by a DB admin is detectable (not just partial tampering).
 
@@ -231,7 +231,7 @@ A small, typed, deterministic state-machine engine. **Interface (concrete):**
 - **Sub-graphs**: an agent is a graph; the orchestrator composes agent graphs as callable nodes with explicit input/output state contracts (no shared mutable global — state is passed, not ambiently mutated → auditable).
 - **Ledger hook**: the kernel emits a LedgerEntry on every node entry/exit, tool call, and model call.
 
-**Decision — build vs. adopt (time-boxed):** we start by building this focused kernel because it gives total control of the Guardian gate, the hash-chained ledger, and ledger-based replay. **Guardrail:** this kernel is budgeted at a small, reviewable size; **if its spec/implementation outgrows that budget during S1, we fall back to LangGraph (MIT, Apache-compatible) and wrap it with our Guardian + ledger + tenancy**, since LangGraph already provides graph + Postgres checkpointing + HITL interrupts. The license/control argument is a *preference*, not a hard requirement — we will not reinvent a mature framework at the cost of the timeline. **Pydantic-AI (MIT)** is used inside nodes for typed, model-agnostic structured outputs / tool calls regardless of which kernel path we take. *(Reproducibility: the decision path is replayable from the ledger; we do not claim bit-identical LLM output — hosted and batched-local inference are not deterministic even at temp=0.)*
+**Decision — build vs. adopt (time-boxed):** we start by building this focused kernel because it gives total control of the Guardian gate, the hash-chained ledger, and ledger-based replay. **Guardrail (concrete budget):** the kernel core (nodes/edges/state/checkpoint/suspend-resume/parallel/ledger-hook, excluding tests) is budgeted at **≤ ~1,500 LOC and ≤ ~1 week of build time**; **if it exceeds either during S1, we fall back to LangGraph (MIT, Apache-compatible) and wrap it with our Guardian + ledger + tenancy**, since LangGraph already provides graph + Postgres checkpointing + HITL interrupts. The decision is recorded in `BUILD_LOG.md`. The license/control argument is a *preference*, not a hard requirement — we will not reinvent a mature framework at the cost of the timeline. **Pydantic-AI (MIT)** is used inside nodes for typed, model-agnostic structured outputs / tool calls regardless of which kernel path we take. *(Reproducibility: the decision path is replayable from the ledger; we do not claim bit-identical LLM output — hosted and batched-local inference are not deterministic even at temp=0.)*
 
 ### 4.5 Tech choices + rationale
 
@@ -259,6 +259,8 @@ A small, typed, deterministic state-machine engine. **Interface (concrete):**
 **Dependency discipline:** every runtime dependency is justified; the ledger, Guardian, connector SDK, asset inventory, and (unless we invoke the LangGraph fallback) the kernel are first-party. No telemetry/phone-home dependency is permitted.
 
 ### 4.6 The agent roster (orchestrator + 14, staged by depth)
+
+**Agent SDK (frozen interface the 9 staged agents build against):** an agent is `class Agent` declaring `name`, `autonomy_level`, an `AgBOM`, and `input_schema`/`output_schema` (Pydantic), implemented as a kernel sub-graph with `async def run(ctx: RunContext[AgentState]) -> AgentOutput`; it declares its **tools** (connector capabilities + MCP tools) and may call `ctx.memory.recall(...)` (opt-in), `ctx.llm(...)` (gateway, bounded), and `ctx.guardian.check(action)` before any state-changing call. Outputs are schema-validated and evidence-cited. This contract is frozen at S6 so S9 agents build against a stable surface.
 
 **"Deeply implemented" acceptance bar (applies to every agent at its milestone):** (1) a typed input/output contract and an AgBOM; (2) deterministic-first enrichment before any LLM call; (3) bounded, scoped LLM steps (no open-ended autonomy); (4) evidence-cited, schema-validated outputs with a calibrated confidence; (5) declared autonomy level enforced by the Guardian; (6) ≥1 happy-path + ≥2 adversarial tests (incl. an injection case) and an entry in the eval harness or a dedicated functional check; (7) documented limits.
 
@@ -368,6 +370,8 @@ Phases 4 (site + deck) and 5 (≥3 adversarial hardening rounds) run after S10 p
 
 ## 9. Definition of Done
 
+> **Release arcs (de-risking scope).** **Arc 1 — "first public release" (≈ S0–S7 + core-5 + eval honesty):** a self-hostable, offline-capable, Guardian-gated Tier-1 triage product with the coworker UI, local-admin auth, and the honest eval harness — enough to be genuinely useful and launchable. **Arc 2 — "enterprise GA" (S8):** full SSO (OIDC+SAML)+SCIM+MFA, multi-tenant isolation hardening, Helm/signed-images/SBOM/Zarf. **Arc 3 — "full roster" (S9–S10):** the remaining 9 agents + maturity. The DoD below is the complete first-build target; Arc boundaries let us ship/validate earlier without changing the end state.
+
 **First-cut DoD (ends the first build arc; = S0–S8 + core-5 + eval honesty):**
 - [ ] All first-cut **[MUST]** FRs implemented; **core-5 agents + orchestrator** deeply implemented (per §4.6 bar) with a documented **Agent SDK**.
 - [ ] `docker compose up` runs the full stack on a fresh machine; **offline mode** triages an alert end-to-end with no API key; the **walking-skeleton loop works from S2 onward**.
@@ -401,3 +405,5 @@ OCSF **1.9.0** · STIX/TAXII **2.1** · Sigma **v2.1.0** · MITRE ATT&CK **v19.2
 7. Eval honesty → **named pinned model for published numbers + documented dataset + illustrative-floor labeling** (FR-43, §6).
 
 Non-blocking items folded in: throughput/flood test (FR-34/§6), per-case cost accounting (FR-35), memory down to folder+pgvector-first with concrete poisoning defenses + embedding versioning (FR-25/29), entity resolution (§4.8), honest ledger tamper model + optional anchoring (FR-46, §8), per-agent "deeply implemented" bar (§4.6), dependency fixes (CVE/KEV + detection inventory FR-19; DSGAI → OWASP GenAI Data-Security; FR-18 "where applicable"), trimmed v1 auth surface (OIDC MUST-ENT, SAML/SCIM MUST-ENT, passkeys SHOULD).
+
+**ExpertSpecReviewer cycle 2 → APPROVE** (no blocking issues; all 7 prior blockers verified genuinely resolved). Its 11 non-blocking refinements folded in: ledger retention/partitioning + hash-over-ciphertext (FR-6); crypto-shred key management incl. backups (FR-44); embeddings+reranker in the gateway with offline variants (FR-8); named BM25 mechanism + reranker air-gap (FR-27); calibration method stated / "calibration the harness measures" (FR-31, G1); concrete kernel LOC/time budget (§4.4); Agent SDK frozen interface (§4.6); verdict-class vs disposition split (G1/FR-31); release arcs to de-risk scope (§9); editorial S7 fix (FR-36). Remaining minor items (e.g. exact archival tiering) are implementation details for the build log.
