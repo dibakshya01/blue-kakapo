@@ -1,0 +1,61 @@
+# blue-kakapo — localhost deployment.
+#
+#   docker compose -f deploy/compose/docker-compose.yml up
+#
+# Ships three services: the control-plane API, Postgres+pgvector, and (optional) Ollama for local
+# models. By default the API runs in OFFLINE mode (no key, no data leaves the host). To use a real
+# provider, set BK_PROVIDER + the matching key in a .env file next to this one.
+name: blue-kakapo
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: blue-kakapo:dev
+    environment:
+      BK_API_HOST: 0.0.0.0
+      BK_API_PORT: "8713"
+      BK_STORAGE_BACKEND: ${BK_STORAGE_BACKEND:-postgres}
+      BK_DATABASE_URL: ${BK_DATABASE_URL:-postgresql+psycopg://kakapo:kakapo@db:5432/kakapo}
+      BK_PROVIDER: ${BK_PROVIDER:-offline}
+      BK_MODEL: ${BK_MODEL:-offline-deterministic}
+      BK_OLLAMA_BASE_URL: ${BK_OLLAMA_BASE_URL:-http://ollama:11434}
+      BK_ANTHROPIC_API_KEY: ${BK_ANTHROPIC_API_KEY:-}
+      BK_OPENAI_API_KEY: ${BK_OPENAI_API_KEY:-}
+      BK_LOG_JSON: "true"
+    ports:
+      - "8713:8713"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: kakapo
+      POSTGRES_PASSWORD: kakapo
+      POSTGRES_DB: kakapo
+    volumes:
+      - bk_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kakapo -d kakapo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional local-model runtime. Enable with:  docker compose --profile local-llm up
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-llm"]
+    volumes:
+      - bk_ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+volumes:
+  bk_pgdata:
+  bk_ollama:

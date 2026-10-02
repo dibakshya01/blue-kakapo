@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint · type · test (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra otel --python ${{ matrix.python }}
+
+      - name: Ruff (lint)
+        run: uv run ruff check src tests
+
+      - name: Ruff (format check)
+        run: uv run ruff format --check src tests
+
+      - name: Mypy (types)
+        run: uv run mypy
+
+      - name: Pytest
+        run: uv run pytest
+
+      - name: Smoke-test the CLI (README quickstart promise)
+        run: |
+          uv run bk version
+          uv run bk info
