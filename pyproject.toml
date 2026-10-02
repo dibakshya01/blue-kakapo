@@ -24,10 +24,12 @@ dependencies = [
   "structlog>=24.1",
   "numpy>=1.26",
   "typing-extensions>=4.11",
+  "sqlalchemy>=2.0",      # one DB layer for SQLite (dev) and Postgres (prod)
+  "cryptography>=42.0",   # per-record AES-GCM crypto-shredding for GDPR-respecting erasure
 ]
 
 [project.optional-dependencies]
-postgres = ["sqlalchemy>=2.0", "psycopg[binary]>=3.1", "pgvector>=0.3"]
+postgres = ["psycopg[binary]>=3.1", "pgvector>=0.3"]
 otel = [
   "opentelemetry-api>=1.25",
   "opentelemetry-sdk>=1.25",
