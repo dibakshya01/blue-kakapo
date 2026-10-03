@@ -231,6 +231,17 @@ class Store:
             )
             return dict(row) if row else None
 
+    def delete_checkpoints_by_case(self, tenant_id: str, case_id: str) -> int:
+        """Drop all kernel checkpoints for a case. Each ``state_json`` is a full Case snapshot, so
+        this must run on GDPR erasure (an erased case is not resumable). Returns rows removed."""
+        with self.engine.begin() as conn:
+            result = conn.execute(
+                delete(checkpoints).where(
+                    checkpoints.c.tenant_id == tenant_id, checkpoints.c.case_id == case_id
+                )
+            )
+            return result.rowcount or 0
+
     def upsert_case(self, values: dict[str, Any]) -> None:
         with self.engine.begin() as conn:
             exists = conn.execute(select(cases.c.id).where(cases.c.id == values["id"])).first()

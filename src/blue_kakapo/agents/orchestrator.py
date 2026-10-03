@@ -323,13 +323,14 @@ class TriageOrchestrator:
         return case
 
     async def erase_case(self, case_id: str) -> dict[str, Any]:
-        """GDPR subject-erasure: crypto-shred the case's raw blobs and remove PII from every surface.
+        """GDPR subject-erasure across every PII-bearing surface of a case.
 
-        Scrubs the stored case (raw blobs, free-text, evidence queries, observables, entities),
-        redacts PII from the case's **pending approvals** (``action.target``/``args``/reason), and
-        deletes any memory records derived from it. The append-only ledger is untouched (it holds no
-        PII) and still verifies afterwards. A ``case.erased`` entry is appended once so the erasure is
-        auditable; re-erasing is idempotent (no duplicate entry).
+        Crypto-shreds raw blobs, scrubs known-pattern PII (emails/SSNs/phones) + the case's own
+        identified PII values from the case's free-text/observables/entities, redacts the case's
+        approval rows, deletes the kernel checkpoints (each holds a full case snapshot), and deletes
+        derived memory records. Pattern/value-based (not NER): see ``docs/gdpr-erasure.md`` for the
+        honest scope. The append-only ledger is untouched (holds no PII) and still verifies. A
+        ``case.erased`` entry is appended once; re-erasing is idempotent (no duplicate entry).
         """
         case = self.repo.get(case_id)
         if case is None:
@@ -340,6 +341,8 @@ class TriageOrchestrator:
         case.erased_at = utcnow()
         self.repo.save(case)
         approvals_redacted = self._redact_case_approvals(case.tenant_id, case.id, pii_values)
+        # Kernel checkpoints each hold a full Case snapshot — drop them (an erased case is not resumable).
+        checkpoints_deleted = self.store.delete_checkpoints_by_case(case.tenant_id, case.id)
         memory_deleted = 0
         if self.memory is not None:
             memory_deleted = await self.memory.forget_case(case.tenant_id, case.id)
@@ -356,6 +359,7 @@ class TriageOrchestrator:
             "erased_at": case.erased_at.isoformat(),
             "memory_records_deleted": memory_deleted,
             "approvals_redacted": approvals_redacted,
+            "checkpoints_deleted": checkpoints_deleted,
             **report,
         }
 

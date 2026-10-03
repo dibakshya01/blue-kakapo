@@ -10,7 +10,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from blue_kakapo.agents import TriageOrchestrator
 from blue_kakapo.api import create_app
@@ -18,6 +18,7 @@ from blue_kakapo.assets import AssetInventory
 from blue_kakapo.config import ProviderKind, Settings
 from blue_kakapo.connectors import ConnectorRegistry, MockEDR, MockSIEM
 from blue_kakapo.core import PII_REF_KEY, CryptoShredder, Ledger, Store
+from blue_kakapo.core.store import checkpoints as checkpoints_table
 from blue_kakapo.core.store import ledger as ledger_table
 from blue_kakapo.guardian import (
     GuardedExecutor,
@@ -186,18 +187,34 @@ async def test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase() -> None:
     for entry in Ledger(store).replay("t1", case_id=case.id):
         assert "123-45-6789" not in json.dumps(entry.model_dump(mode="json"))
 
-    # Subject-erasure must leave NO PII anywhere in the stored case — including title/message.
+    # Subject-erasure must leave NO identified PII anywhere — the case doc AND the checkpoints table
+    # (each checkpoint holds a full Case snapshot; round-4 F1 found it was a second cleartext copy).
     report = await orch.erase_case(case.id)
     assert report["blobs_shredded"] >= 1
-    erased_blob = json.dumps(store.get_case(case.id)["data"])
-    for pii in (
+    pii_values = (
         "987-65-4321",
         "123-45-6789",
         "jane.doe@acme.com",
         "bob.smith@acme.com",
         "jane.doe",
-    ):
-        assert pii not in erased_blob, f"PII {pii!r} survived erasure"
+        "patient 42 record",
+    )
+    erased_blob = json.dumps(store.get_case(case.id)["data"])
+    for pii in pii_values:
+        assert pii not in erased_blob, f"PII {pii!r} survived erasure in the case document"
+    # The checkpoints table must not retain a cleartext snapshot of the case.
+    with store.engine.begin() as conn:
+        cps = [
+            dict(r)
+            for r in conn.execute(
+                select(checkpoints_table).where(checkpoints_table.c.case_id == case.id)
+            )
+            .mappings()
+            .all()
+        ]
+    cp_blob = json.dumps(cps, default=str)
+    for pii in pii_values:
+        assert pii not in cp_blob, f"PII {pii!r} survived erasure in the checkpoints table"
     assert Ledger(store).verify("t1") is True
 
 
@@ -242,20 +259,32 @@ async def test_erasure_scrubs_evidence_query_and_approvals() -> None:
     assert Ledger(store).verify("t1") is True
 
 
-# Verdict steering (round-3 🟡-F4) — a homoglyph-obfuscated threat word can't slip past the veto.
-async def test_homoglyph_threat_cannot_force_auto_close() -> None:
+# Verdict steering (round-3 🟡-F4, round-4 F4) — homoglyph folding is LOAD-BEARING: the same alert that
+# would auto-close (benign allowlist indicator + low severity) must escalate once the obfuscated threat
+# word is folded and recognized. The fold, not the fixture, is what flips the verdict.
+async def test_homoglyph_fold_is_load_bearing_for_the_veto() -> None:
+    # Baseline that legitimately auto-closes: a benign allowlist domain at low severity, clean text.
     orch = TriageOrchestrator(Store.in_memory(), _gw())
-    case = await orch.triage_alert(
-        {  # Cyrillic а/о/е in "rаnsоmwаrе bеаcоn", padded with benign keywords at low severity
-            "title": "scheduled task known good",
-            "message": "rаnsоmwаrе bеаcоn (false positive, known good, scheduled)",
-            "severity": "low",
-        },
+    benign = await orch.triage_alert(
+        {"title": "update check", "severity": "low", "domain": "updates.example"},
         tenant_id="t1",
     )
-    assert case.verdict is not None
-    assert case.verdict.routing != "auto_close"
-    assert case.state != "resolved"
+    assert benign.verdict and benign.verdict.routing == "auto_close"  # the branch is reachable
+
+    # Same benign indicator + severity, but with a Cyrillic-homoglyph threat word in the message.
+    # ASCII-blind code would still auto_close; folding recognizes "ransomware" and escalates.
+    obf = await orch.triage_alert(
+        {
+            "title": "update check",
+            "severity": "low",
+            "domain": "updates.example",
+            "message": "rаnsоmwаrе bеаcоn observed",  # Cyrillic а/о/е
+        },
+        tenant_id="t2",
+    )
+    assert obf.verdict is not None
+    assert obf.verdict.routing != "auto_close"  # folding tripped the strong-threat veto
+    assert obf.state != "resolved"
 
 
 # GDPR (round-2 🟡-M1) — erasure also purges memory records derived from the case.

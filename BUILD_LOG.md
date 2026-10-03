@@ -503,3 +503,39 @@ Content-Length body-size middleware (not just the post-parse 413 cap); on approv
 **re-evaluated through the Guardian** and refused if it now DENYs (tamper/policy-drift defense);
 `case.assignee` scrubbed on erase; erase is idempotent (no duplicate `case.erased` ledger entry);
 documented one-credential-per-approver (two local tokens = two ids).
+
+### Round 4 ✅ (2026-10-03) — fresh memory-free adversarial reviewer
+
+Reviewer confirmed rounds 1–3 hold (crypto-shred survives even the leak; approvals redaction covers
+non-pending rows; memory purge real; no PII on the WS bus or in logs — two surfaces it explicitly
+checked). But the GDPR-completeness theme recurred a fourth time, and it caught two round-3 tests that
+didn't prove their names. All fixed. **152 tests**, ruff/format/mypy clean.
+
+**🔴 F1 — `checkpoints` table kept a full cleartext case snapshot after erase (fixed).** The kernel
+checkpoints each node with `state_json = full Case`; `erase_case` never touched the `checkpoints`
+table (no delete method existed), so every normalized PII value — incl. the structured PII the
+case-level scrub removes — survived in cleartext forever. Fixed: added
+`store.delete_checkpoints_by_case` and `erase_case` now deletes the case's checkpoints (an erased case
+is not resumable). Verified live: a checkpoint held the email+SSN pre-erase, is gone post-erase.
+
+**🟡 F2 — non-observable free-text PII (e.g. a plain display name) survives; "every field" overclaimed
+(fixed by honest wording).** The scrub is pattern- + value-based, not NER, so a name like "Jane
+Roberts" that is neither a recognized pattern nor an extracted observable isn't detected. Reworded
+`docs/gdpr-erasure.md` + the `erase_case`/`erase_case_pii` docstrings to state the honest scope
+(known-pattern PII + the case's identified observables/entities) and to point at hard-delete for the
+stronger guarantee. (No fake NER; no silent overclaim.)
+
+**🟡 F3 — `fold_confusables` missed uppercase homoglyphs (fixed).** The map was lowercase-only and
+folded before lowercasing, so `Ѕystem prompt` / `Іgnore all previous…` slipped past the scanners.
+Fixed: `casefold()` before the translate, so uppercase Cyrillic/Greek folds to its lowercase form and
+then to ASCII.
+
+**🟡 F4 / F5 — two round-3 tests didn't prove their names (fixed).** The homoglyph test passed even
+with folding disabled (the auto_close branch was unreachable for its fixture); rewrote it with a
+benign-allowlist-indicator + low-severity baseline that *does* auto_close, so the fold is now the thing
+that flips it to escalate. The "fully scrubbed" test only checked the case document; extended it to
+also assert the `checkpoints` table is PII-free (it now fails without the F1 fix).
+
+**⚪ F6 — body-size middleware is Content-Length-only** (a chunked request without the header isn't
+caught by the global cap; the per-route 413 and uvicorn limits remain). Left as documented
+defense-in-depth; a streaming byte cap is the follow-up if a hard bound is required.

@@ -51,8 +51,12 @@ _CONFUSABLES = str.maketrans(
 
 
 def fold_confusables(text: str) -> str:
-    """NFKC-normalize, map common Latin-lookalikes to ASCII, and drop zero-width chars."""
-    return unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+    """NFKC-normalize, casefold, map common Latin-lookalikes to ASCII, and drop zero-width chars.
+
+    Casefold runs **before** the translate so uppercase homoglyphs (e.g. Cyrillic ``Ѕ``/``І``) fold to
+    their lowercase forms, which the map then converts. The scan paths are case-insensitive, so folding
+    case here is safe."""
+    return unicodedata.normalize("NFKC", text).casefold().translate(_CONFUSABLES)
 
 
 _INJECTION_PATTERNS = [

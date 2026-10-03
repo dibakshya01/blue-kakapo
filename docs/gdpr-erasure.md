@@ -18,15 +18,23 @@ Personal data in a case lives on two surfaces, and we handle each honestly:
 - **The ledger carries no PII** — only action strings, dispositions, and tokenized refs — so it keeps
   verifying across an erasure.
 
-**A subject-erasure** (`POST /api/cases/{id}/erase?confirm=true`, admin-gated) removes personal data
-from **every field of the stored case**: it crypto-shreds the raw blobs' keys (unrecoverable),
-redacts the flagged observables + resolved PII entities, and scrubs emails/SSNs and the case's own PII
-values out of all the free-text fields — then **deletes any memory records derived from the case**.
-The hash chain still verifies, and the erasure is recorded as a `case.erased` ledger entry. *(Verified
-by `tests/test_attack_suite.py::test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase` and
-`::test_erasure_purges_derived_memory`.)*
+**A subject-erasure** (`POST /api/cases/{id}/erase?confirm=true`, admin-gated) walks **every PII-bearing
+surface of the stored case**: it crypto-shreds the raw blobs' keys (unrecoverable), redacts the flagged
+observables + resolved PII entities, scrubs **known-pattern PII (emails, SSNs, phone numbers) and the
+case's own identified PII values** out of all free-text fields (title/message/rule_name/evidence
+summaries + queries/verdict rationale/assignee), redacts the case's **approval rows**, **deletes the
+kernel checkpoints** (each holds a full case snapshot), and **deletes any memory records derived from
+the case**. The hash chain still verifies, and the erasure is recorded once as a `case.erased` ledger
+entry (idempotent). *(Verified by `tests/test_attack_suite.py::test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase`,
+`::test_erasure_scrubs_evidence_query_and_approvals`, and `::test_erasure_purges_derived_memory`.)*
 
-For a stronger guarantee (remove the record entirely), hard-delete the case document — the PII-free
+**Honest scope of the scrub.** Redaction is pattern- and value-based, not NER: it removes the PII
+patterns above and the values the case itself identified as PII (extracted usernames/emails and
+resolved entities). Free-text PII that is **neither a recognized pattern nor one of those values** —
+e.g. a plain display name like "Jane Roberts" typed into an alert title — is **not** detected. For a
+subject whose personal data includes such free text, use the stronger guarantee below.
+
+For that stronger guarantee (remove the record entirely), hard-delete the case document — the PII-free
 ledger survives and still verifies on its own.
 
 ## Operator responsibilities (honest limits)

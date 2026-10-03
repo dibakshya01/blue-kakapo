@@ -112,12 +112,15 @@ def protect_case_pii(case: Case, shredder: CryptoShredder) -> int:
 
 
 def erase_case_pii(case: Case, shredder: CryptoShredder) -> dict[str, int]:
-    """Subject-erasure: crypto-shred raw blobs and remove PII from **every** field of the case.
+    """Subject-erasure over the case document: crypto-shred raw blobs + scrub identified PII.
 
     Shreds the tokenized raw blobs, redacts PII-flagged observables + resolved PII entities, and
-    scrubs emails/SSNs/the case's own PII values out of all free-text fields (title, alert titles,
-    rule names, event messages, evidence summaries, verdict rationale). Returns a small report. The
-    ledger is untouched (it carries no PII) and continues to verify. Idempotent.
+    scrubs **known-pattern PII (emails/SSNs/phones) and the case's own identified PII values** out of
+    the free-text fields (title, alert titles, rule names, event messages, evidence summaries +
+    queries, verdict rationale, assignee). Pattern/value-based, not NER — arbitrary free-text names
+    are not detected (see module docstring). Callers also erase the case's approvals, checkpoints, and
+    memory. Returns a small report. The ledger is untouched (carries no PII) and still verifies.
+    Idempotent.
     """
     shredded = redacted_obs = redacted_ent = redacted_text = 0
 
