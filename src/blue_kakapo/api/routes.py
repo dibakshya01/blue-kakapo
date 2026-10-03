@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..agents import TriageOrchestrator
@@ -90,6 +94,69 @@ async def run_evaluation(request: Request) -> dict[str, Any]:
 
     report = await run_eval(gateway=request.app.state.gateway)
     return report.to_dict()
+
+
+class ProviderSwitchRequest(BaseModel):
+    provider: str = Field(..., description="offline | anthropic | openai | ollama")
+    model: str | None = None
+    embedding_model: str | None = None
+
+
+@router.post("/provider/switch")
+async def provider_switch(req: ProviderSwitchRequest, request: Request) -> dict[str, Any]:
+    """Switch the active LLM provider/model at runtime (no restart)."""
+    gateway = request.app.state.gateway
+    overrides: dict[str, Any] = {"provider": req.provider}
+    if req.model:
+        overrides["model"] = req.model
+    if req.embedding_model:
+        overrides["embedding_model"] = req.embedding_model
+    gateway.switch(**overrides)
+    return {
+        "provider": gateway.provider_name,
+        "model": gateway.model,
+        "offline": gateway.provider_name == "offline",
+    }
+
+
+class OllamaPullRequest(BaseModel):
+    model: str = Field(..., description="Local model to pull, e.g. 'qwen3:8b'.")
+
+
+@router.post("/provider/ollama/pull")
+async def ollama_pull(req: OllamaPullRequest, request: Request) -> StreamingResponse:
+    """Stream an Ollama model pull (the local-model bootstrap). NDJSON progress lines."""
+    from ..providers import OllamaProvider, ProviderError
+
+    settings = request.app.state.settings
+    provider = OllamaProvider(base_url=settings.ollama_base_url)
+
+    async def _stream() -> AsyncIterator[str]:
+        try:
+            async for progress in provider.pull_model(req.model):
+                yield json.dumps(progress) + "\n"
+        except ProviderError as exc:
+            yield json.dumps({"error": str(exc)}) + "\n"
+
+    return StreamingResponse(_stream(), media_type="application/x-ndjson")
+
+
+@router.websocket("/ws")
+async def live_updates(ws: WebSocket) -> None:
+    """Live case/run events for the dashboard (tenant-filtered)."""
+    await ws.accept()
+    bus = ws.app.state.bus
+    tenant = ws.query_params.get("tenant_id") or ws.app.state.settings.default_tenant
+    try:
+        async with bus.subscribe(topic_prefix="", tenant_id=tenant) as queue:
+            while True:
+                event = await queue.get()
+                await ws.send_json({"topic": event.topic, "payload": event.payload, "ts": event.ts})
+    except WebSocketDisconnect:
+        return
+    except Exception:  # noqa: BLE001 — never let a socket error crash the server
+        with contextlib.suppress(Exception):
+            await ws.close()
 
 
 @router.get("/memory/status")

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from typing import Any
 
 from ..schema.ledger import LedgerEntry, ModelRef
@@ -36,6 +37,10 @@ class Ledger:
 
     def __init__(self, store: Store) -> None:
         self.store = store
+        # Appends are hash-chained (seq + prev_hash depend on the latest row), so they must be
+        # serialized. The kernel writes from worker threads (asyncio.to_thread), so this is a
+        # threading lock. (For multi-process/Postgres, use a DB advisory lock or a single writer.)
+        self._lock = threading.Lock()
 
     def append(
         self,
@@ -53,6 +58,36 @@ class Ledger:
         trace_id: str | None = None,
     ) -> LedgerEntry:
         """Build, chain, and persist a ledger entry. Returns the stored entry (with ``hash`` set)."""
+        with self._lock:
+            return self._append_locked(
+                tenant_id=tenant_id,
+                action=action,
+                actor=actor,
+                actor_id=actor_id,
+                case_id=case_id,
+                run_id=run_id,
+                inputs_ref=inputs_ref,
+                outputs_ref=outputs_ref,
+                model=model,
+                disposition=disposition,
+                trace_id=trace_id,
+            )
+
+    def _append_locked(
+        self,
+        *,
+        tenant_id: str,
+        action: str,
+        actor: str,
+        actor_id: str | None,
+        case_id: str | None,
+        run_id: str | None,
+        inputs_ref: str | None,
+        outputs_ref: str | None,
+        model: ModelRef | None,
+        disposition: str | None,
+        trace_id: str | None,
+    ) -> LedgerEntry:
         seq = self.store.next_seq(tenant_id)
         prev = self.store.last_hash(tenant_id)
         entry = LedgerEntry(

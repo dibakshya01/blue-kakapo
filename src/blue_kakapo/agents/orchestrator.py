@@ -8,6 +8,7 @@ path (``respond``), never auto-run. More agents (S9) attach to this same shape.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel
@@ -77,6 +78,7 @@ class TriageOrchestrator:
         registry: ConnectorRegistry | None = None,
         inventory: AssetInventory | None = None,
         guardian: GuardedExecutor | None = None,
+        max_concurrent_cases: int = 16,
     ) -> None:
         self.store = store
         self.gateway = gateway
@@ -88,6 +90,10 @@ class TriageOrchestrator:
         self.registry = registry
         self.inventory = inventory
         self.guardian = guardian
+        # Backpressure: bound concurrent case processing so a flood queues rather than overwhelming
+        # the box (FR-34). Excess ingests await here instead of exploding memory/CPU.
+        self._sem = asyncio.Semaphore(max_concurrent_cases)
+        self.max_concurrent_cases = max_concurrent_cases
         self.l1 = L1Agent()
         self.intel = IntelAgent()
         self.l2 = L2Agent()
@@ -213,7 +219,8 @@ class TriageOrchestrator:
             bus=self.bus,
             case_id=case.id,
         )
-        outcome = await self.engine.run(self.graph, ctx)
+        async with self._sem:  # backpressure: bound in-flight cases under a flood
+            outcome = await self.engine.run(self.graph, ctx)
         final_case = outcome.state.case
         self.repo.save(final_case)
         if self.memory is not None and final_case.memory_enabled:
