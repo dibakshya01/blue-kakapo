@@ -54,18 +54,51 @@
     </div>
   </section>
 
-  <section class="wrap reveal" data-verdict>
-    <div class="glass" data-parallax="0.03" style="padding:20px; max-width:760px; margin:0 auto;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <span class="mono muted" style="font-size:.78rem;">CASE · case_01M…52PB</span>
-        <span class="vbadge v-red">malicious → escalate · 90%</span>
+  <section class="wrap reveal demo" id="try">
+    <div class="kicker">Try it — right here, no install</div>
+    <h2>Click an alert. Watch the swarm show its work.</h2>
+    <p class="lede" style="margin:10px 0 0;">A faithful, offline mock of the real deterministic first pass — pick a sample and the agents triage it live, cite their evidence, and route it.</p>
+    <div class="demo-grid">
+      <div class="demo-alerts" role="tablist" aria-label="Sample alerts">
+        <button class="alertcard" data-alert="malicious" role="tab">
+          <span class="sev s-high">high</span>
+          <span class="at">Outbound connection to known C2</span>
+          <span class="am mono">dst_ip 198.51.100.23 · malware.example</span>
+        </button>
+        <button class="alertcard" data-alert="suspicious" role="tab">
+          <span class="sev s-med">medium</span>
+          <span class="at">Encoded PowerShell execution</span>
+          <span class="am mono">host WS-204 · user jdoe</span>
+        </button>
+        <button class="alertcard" data-alert="benign" role="tab">
+          <span class="sev s-low">low</span>
+          <span class="at">Scheduled backup login</span>
+          <span class="am mono">user backup-svc · internal.example</span>
+        </button>
       </div>
-      <div class="confbar" aria-hidden="true"><i data-to="90"></i></div>
-      <div class="mono" style="font-size:.84rem; color:#cfd8e3; line-height:1.9;">
-        <div class="vline"><span style="color:var(--accent-2)">builtin-intel</span> &nbsp;198.51.100.23 matches a known-bad indicator &nbsp;<span class="muted">[malicious]</span></div>
-        <div class="vline"><span style="color:var(--accent-2)">threat-intel</span> &nbsp;malware.example associated with known-malicious activity &nbsp;<span class="muted">[malicious]</span></div>
-        <div class="vline"><span style="color:var(--accent-2)">attack-map</span> &nbsp;maps to ATT&amp;CK tactic: command-and-control &nbsp;<span class="muted">[context]</span></div>
-        <div class="vfinal" style="margin-top:8px;"><span class="tick">✓</span> ledger verified · intake → l1 → investigate → route</div>
+
+      <div class="glass demo-console" data-parallax="0.02" aria-live="polite">
+        <div class="dc-head">
+          <span class="mono muted dc-case">CASE · —</span>
+          <span class="vbadge dc-badge">select an alert →</span>
+        </div>
+        <div class="pipeline" aria-hidden="true">
+          <span class="pstage" data-stage="intake">intake</span>
+          <span class="parr">→</span>
+          <span class="pstage" data-stage="l1">L1</span>
+          <span class="parr">→</span>
+          <span class="pstage" data-stage="intel">INTEL</span>
+          <span class="parr">→</span>
+          <span class="pstage" data-stage="l2">L2</span>
+          <span class="parr">→</span>
+          <span class="pstage" data-stage="fusion">FUSION</span>
+          <span class="parr">→</span>
+          <span class="pstage" data-stage="route">route</span>
+        </div>
+        <div class="confbar" aria-hidden="true"><i class="dc-bar" data-to="0"></i></div>
+        <div class="dc-evidence mono"></div>
+        <div class="vfinal dc-final"><span class="tick">✓</span> <span class="dc-final-text"></span></div>
+        <div class="dc-hint muted mono">↑ pick a sample alert to run a triage</div>
       </div>
     </div>
   </section>
