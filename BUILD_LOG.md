@@ -305,3 +305,41 @@ DORA/NIS2/GDPR/SEC clocks**; compliance only for reportable verdicts. ruff + myp
 **Exit check (S9):** each remaining agent meets the §4.6 depth bar with its acceptance test; MGR tracks
 regulatory clocks; DET proposes a Sigma rule + coverage delta; VULN prioritizes by active-threat
 context; INSIDER runs under privacy controls. ✅  **All 14 agents now deeply implemented.**
+
+---
+
+## S10 — Eval, docs, security self-review ✅ (2026-10-03)
+
+**Shipped:**
+- `tests/test_attack_suite.py` — the consolidated **adversarial suite** (9 integrated scenarios):
+  indirect prompt injection contained, excessive-agency blocked on crown jewels, MCP rug-pull refused,
+  memory poisoning quarantined, unsafe output caught, ledger tamper detected, GDPR erasure preserves
+  the chain, cross-tenant access denied, connector reversibility declared.
+- `docs/` (13 pages): index, getting-started, architecture, agents, connectors, providers, memory,
+  guardian, eval (+ dataset methodology), **security-model (OWASP LLM/ASI/MCP + NIST + AISVS 1.0
+  self-assessment)**, **what-it-can-and-cannot-do**, threat-model, **gdpr-erasure**.
+
+**Verified:** `uv run pytest` → **138 passed** (9 new). README-promise CLI smoke reproduces:
+`bk version`, `bk eval` (precision 1.0 / **FNR 0.10** / illustrative-floor label), `bk triage`
+(malicious→escalate). ruff + format + mypy (74 files) + tsc clean.
+
+---
+
+## ✅ First-cut Definition of Done (build-plan §9)
+
+- [x] All first-cut MUST FRs; **core-5 deep + Agent SDK**; all 14 agents deep (S9).
+- [x] `bk serve` runs on a fresh machine; **offline mode triages end-to-end with no key**; walking
+      skeleton works from S2 on.
+- [x] Self-checks clean: ruff + ruff-format + mypy (74) + tsc; **138 tests** green.
+- [x] **Adversarial suite passes** (injection, excessive-agency+modify, rug-pull, memory-poisoning,
+      output-handling, ledger-tamper, erasure, tenancy).
+- [x] **Eval harness** reproducible; reports precision/recall/**FNR**/cost; offline labeled illustrative.
+- [x] **Ledger** tamper-evident + replayable; **crypto-shred erasure** keeps the chain verifiable.
+- [x] Enterprise: OIDC SSO, SCIM, RBAC/ABAC, secrets (OpenBao), multi-tenant isolation; **Helm** chart;
+      **cosign-sign + SBOM** in CI; Zarf air-gap package.
+- [x] Docs incl. **"what it can & cannot do"**, dataset methodology, GDPR/erasure, **AISVS
+      self-assessment**; README quickstart reproduces.
+- [x] `BUILD_LOG.md` + `HANDOFF.md` current; **no unaudited accuracy numbers** anywhere.
+
+**Phase 3 build complete (Arcs 1–3).** Next: Phase 4 (site + deck), Phase 5 (≥3 adversarial hardening
+rounds), Phase 6 (handoff).

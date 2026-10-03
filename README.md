@@ -80,6 +80,16 @@ frontier models on hard cases. Guardrails reduce, not eliminate, prompt-injectio
 negatives remain possible, which is why humans stay in the loop and we ship the measuring tool rather
 than a number. See [`build-plan.md`](build-plan.md) §8.
 
+## Documentation
+
+Full docs in [`docs/`](docs/index.md): [getting started](docs/getting-started.md),
+[architecture](docs/architecture.md), [the 14 agents](docs/agents.md),
+[connectors](docs/connectors.md), [LLM providers](docs/providers.md), [memory](docs/memory.md),
+[the Guardian](docs/guardian.md), [evaluation](docs/eval.md), the
+[security model + AISVS self-assessment](docs/security-model.md), the
+[threat model](docs/threat-model.md), [GDPR/erasure](docs/gdpr-erasure.md), and — importantly —
+[what it can & cannot do](docs/what-it-can-and-cannot-do.md).
+
 ## Contributing & security
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md). Licensed under
