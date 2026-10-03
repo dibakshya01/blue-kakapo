@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>blue-kakapo — docs</title>
+<meta name="description" content="blue-kakapo quick start, CLI and API surface, and the module map." />
+<link rel="icon" href="assets/kakapo-mark.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="site.css" />
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="index.html"><img src="assets/kakapo-mark.svg" alt="" /> blue-kakapo</a>
+  <button class="navtoggle" aria-label="Menu">☰</button>
+  <nav>
+    <a data-page="index.html" href="index.html">Home</a>
+    <a data-page="eli5.html" href="eli5.html">Plain English</a>
+    <a data-page="docs.html" href="docs.html">Docs</a>
+    <a data-page="architecture.html" href="architecture.html">Architecture</a>
+    <a data-page="contact.html" href="contact.html">Contact</a>
+    <a class="gh" href="https://github.com/dibakshya01/blue-kakapo">GitHub ↗</a>
+  </nav>
+</div></header>
+
+<main class="wrap prose" style="padding-top:48px;">
+  <div class="kicker">Docs</div>
+  <h1>Get running.</h1>
+  <p class="lede">Requires Python 3.11+ and <a href="https://docs.astral.sh/uv/">uv</a>. Offline by default — no API key.</p>
+
+  <h2>Quick start</h2>
+  <pre><code>git clone https://github.com/dibakshya01/blue-kakapo.git
+cd blue-kakapo          # a path without spaces avoids a uv editable-install quirk
+uv sync
+uv run bk serve         # http://127.0.0.1:8713  — the coworker dashboard</code></pre>
+  <p>Then triage from the CLI, or score the bundled dataset honestly:</p>
+  <pre><code>echo '{"title":"C2 beacon","severity":"high","dst_ip":"198.51.100.23"}' | uv run bk triage -
+uv run bk eval          # prints precision / recall / FALSE-NEGATIVE RATE</code></pre>
+
+  <h2>Run with a real model (switchable anytime)</h2>
+  <pre><code>BK_PROVIDER=anthropic BK_ANTHROPIC_API_KEY=... uv run bk serve
+BK_PROVIDER=ollama   BK_MODEL=qwen3:8b        uv run bk serve   # local, in-network</code></pre>
+
+  <h2>Docker &amp; Kubernetes</h2>
+  <pre><code>docker compose -f deploy/compose/docker-compose.yml up        # api + pgvector
+helm install blue-kakapo deploy/helm/blue-kakapo -n blue-kakapo --create-namespace</code></pre>
+  <p>Hardened chart (non-root, read-only rootfs), OIDC SSO, secrets via OpenBao, cosign-signed images +
+  SBOM, and a Zarf air-gap package. See <code class="inline">deploy/helm/README.md</code>.</p>
+
+  <h2>CLI</h2>
+  <table>
+    <tr><th>Command</th><th>Does</th></tr>
+    <tr><td><code class="inline">bk serve</code></td><td>Run the control plane + dashboard.</td></tr>
+    <tr><td><code class="inline">bk triage &lt;file|-&gt;</code></td><td>Triage one alert (JSON) and print the verdict.</td></tr>
+    <tr><td><code class="inline">bk eval [--dataset] [--json]</code></td><td>Run the evaluation harness (reports the FNR).</td></tr>
+    <tr><td><code class="inline">bk info</code></td><td>Show resolved config (secrets redacted).</td></tr>
+  </table>
+
+  <h2>HTTP API (selected)</h2>
+  <table>
+    <tr><th>Endpoint</th><th>Purpose</th></tr>
+    <tr><td><code class="inline">POST /api/ingest</code></td><td>Triage a raw alert → Case (+verdict).</td></tr>
+    <tr><td><code class="inline">GET /api/cases[/{id}[/ledger]]</code></td><td>List / detail / replay the verified ledger trail.</td></tr>
+    <tr><td><code class="inline">POST /api/cases/{id}/respond</code></td><td>Run RESP — Guardian-gated containment.</td></tr>
+    <tr><td><code class="inline">GET /api/agents</code></td><td>The 14-agent roster + each AgBOM + Rule-of-Two.</td></tr>
+    <tr><td><code class="inline">GET /api/eval</code></td><td>Evaluation report (precision/recall/FNR/cost).</td></tr>
+    <tr><td><code class="inline">POST /api/provider/switch</code></td><td>Switch LLM provider/model at runtime.</td></tr>
+    <tr><td><code class="inline">WS /api/ws</code></td><td>Live case/run events for the dashboard.</td></tr>
+    <tr><td><code class="inline">/scim/v2/Users</code></td><td>SCIM provisioning/deprovisioning (admin).</td></tr>
+  </table>
+
+  <h2>The module map</h2>
+  <table>
+    <tr><th>Package</th><th>What's inside</th></tr>
+    <tr><td><code class="inline">core/</code></td><td>deterministic kernel, hash-chained ledger, crypto-shred, store, bus</td></tr>
+    <tr><td><code class="inline">agents/</code></td><td>Agent SDK + the 14-agent roster + orchestrator</td></tr>
+    <tr><td><code class="inline">guardian/</code></td><td>ACS policy engine, approvals, injection + Rule-of-Two</td></tr>
+    <tr><td><code class="inline">connectors/</code></td><td>connector SDK, mock/Wazuh/Elastic, MCP client</td></tr>
+    <tr><td><code class="inline">memory/</code></td><td>opt-in case memory (folder/pgvector) + poisoning defenses</td></tr>
+    <tr><td><code class="inline">providers/</code></td><td>model-agnostic gateway (offline/anthropic/openai/ollama)</td></tr>
+    <tr><td><code class="inline">security/</code></td><td>authn (open/local/OIDC), RBAC, secrets, SCIM</td></tr>
+    <tr><td><code class="inline">eval/</code></td><td>evaluation harness + documented dataset</td></tr>
+  </table>
+
+  <p style="margin-top:28px;">Full guides in the repo's <a href="https://github.com/dibakshya01/blue-kakapo/tree/main/docs"><code class="inline">docs/</code></a>, including the
+  <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/docs/security-model.md">security model + AISVS self-assessment</a> and
+  <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/docs/what-it-can-and-cannot-do.md">what it can &amp; cannot do</a>.</p>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <div class="muted">blue-kakapo · open-source agentic SOC · Apache-2.0</div>
+  <div style="display:flex; gap:22px; flex-wrap:wrap;"><a href="https://github.com/dibakshya01/blue-kakapo">GitHub</a><a href="architecture.html">Architecture</a><a href="contact.html">Contact</a></div>
+</div></footer>
+<script src="site.js"></script>
+</body>
+</html>

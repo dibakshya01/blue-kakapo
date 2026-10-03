@@ -23,8 +23,15 @@ for *you*.
    You may need to allow GitHub Actions to publish packages (repo → Settings → Actions → Workflow
    permissions) and make the GHCR package public.
 
-4. *(Later)* Enable GitHub Pages for the project site; configure branch protection/rulesets on `main`.
-   These are set up as we reach the site/launch stages.
+4. **Enable GitHub Pages for the website.** The 5-page site is built in `docs/`. In repo → Settings →
+   Pages, set Source = `main` branch, `/docs` folder. It will publish at
+   `https://dibakshya01.github.io/blue-kakapo/`.
+
+5. **Set the social preview card.** Repo → Settings → Social preview → upload
+   [`docs/assets/social-card.jpg`](docs/assets/social-card.jpg) so shared links render the card.
+
+6. *(Later)* Configure branch protection/rulesets on `main`; the launch posts (HN/Reddit/socials) are
+   drafted for you in `LAUNCH.md` (git-ignored) when we reach Phase 6.
 
 ## Notes
 

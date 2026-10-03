@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>blue-kakapo — in plain English</title>
+<meta name="description" content="What blue-kakapo is, in plain English, for non-technical readers and leaders: a careful junior security analyst that never sleeps, always shows its work, and asks before doing anything risky." />
+<link rel="icon" href="assets/kakapo-mark.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="site.css" />
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="index.html"><img src="assets/kakapo-mark.svg" alt="" /> blue-kakapo</a>
+  <button class="navtoggle" aria-label="Menu">☰</button>
+  <nav>
+    <a data-page="index.html" href="index.html">Home</a>
+    <a data-page="eli5.html" href="eli5.html">Plain English</a>
+    <a data-page="docs.html" href="docs.html">Docs</a>
+    <a data-page="architecture.html" href="architecture.html">Architecture</a>
+    <a data-page="contact.html" href="contact.html">Contact</a>
+    <a class="gh" href="https://github.com/dibakshya01/blue-kakapo">GitHub ↗</a>
+  </nav>
+</div></header>
+
+<main class="wrap prose" style="padding-top:48px;">
+  <div class="kicker">In plain English</div>
+  <h1>A tireless junior analyst that shows its work.</h1>
+  <p class="lede">For leaders and non-technical readers. No jargon.</p>
+
+  <h2>The problem</h2>
+  <p>A security team (a "SOC" — Security Operations Center) gets a flood of computer alarms every day —
+  often thousands. Most are false alarms, but a few are real attacks. There are never enough trained
+  people to check them all, so many alarms go unread — and the real threat can hide in the pile. Checking
+  them is slow, repetitive, and exhausting, and good analysts burn out and leave.</p>
+
+  <h2>What blue-kakapo is</h2>
+  <p>Think of it as a <strong>careful junior analyst that never sleeps</strong>. For each alarm it
+  gathers the facts, explains what it found <em>in writing with its sources</em>, and gives a clear
+  verdict: "this is harmless, I closed it," or "this looks dangerous — a human should look." It does the
+  boring first pass so your experts spend their time on what actually matters.</p>
+  <p>It's named after the kākāpō — a rare, nocturnal, remarkably clever New Zealand parrot. Watchful at
+  night, resilient, and one of a kind. That's the idea: a vigilant night-shift guardian for your
+  "blue team" (the defenders).</p>
+
+  <h2>Why it's different (and safer)</h2>
+  <ul>
+    <li><strong>It shows its work.</strong> Every decision keeps a tamper-proof record you can replay —
+    no "the computer said so."</li>
+    <li><strong>It asks before doing anything risky.</strong> It can <em>recommend</em> shutting a
+    compromised laptop off the network, but a person approves it. It will never automatically disable
+    your most critical systems.</li>
+    <li><strong>Your data stays with you.</strong> It runs on your own computers — even with no internet —
+    and never phones home.</li>
+    <li><strong>It's honest about mistakes.</strong> It comes with a built-in "report card" that measures
+    how often it could miss a real threat, so you can judge it instead of trusting a sales number.</li>
+  </ul>
+
+  <h2>How you'd get it</h2>
+  <p>It's free and open-source. A security engineer can start it on a laptop in about a minute, connect
+  it to your existing tools, or run it across the company on your own servers. There's nothing to buy and
+  no per-use meter.</p>
+
+  <h2>For leaders — talking points</h2>
+  <ul>
+    <li><strong>Lower risk, faster.</strong> Faster first-pass triage means threats are caught sooner —
+    and regulators (DORA, NIS2, GDPR, SEC) start their reporting clocks the moment you're aware.</li>
+    <li><strong>Do more with the team you have.</strong> Automate the repetitive first pass; keep experts
+    on real incidents; reduce burnout and turnover.</li>
+    <li><strong>No lock-in, no data exodus.</strong> Open-source and self-hosted — critical for
+    regulated, sovereign, or air-gapped environments.</li>
+    <li><strong>Trust you can audit.</strong> Every action is logged and replayable; risky steps need
+    human sign-off.</li>
+  </ul>
+
+  <h2>What it does <em>not</em> do</h2>
+  <p>It isn't magic and it can still be wrong — which is exactly why a person stays in the loop on
+  anything serious. It doesn't replace your detection tools; it helps make sense of what they report.
+  See the honest, detailed
+  <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/docs/what-it-can-and-cannot-do.md">"what it can &amp; cannot do"</a>.</p>
+
+  <div class="hero-cta" style="margin:36px 0;">
+    <a class="btn btn-primary" href="index.html">See the overview →</a>
+    <a class="btn btn-ghost" href="docs.html">Technical docs</a>
+  </div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <div class="muted">blue-kakapo · open-source agentic SOC · Apache-2.0</div>
+  <div style="display:flex; gap:22px; flex-wrap:wrap;"><a href="https://github.com/dibakshya01/blue-kakapo">GitHub</a><a href="docs.html">Docs</a><a href="contact.html">Contact</a></div>
+</div></footer>
+<script src="site.js"></script>
+</body>
+</html>

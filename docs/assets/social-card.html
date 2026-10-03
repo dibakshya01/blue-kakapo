@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root { --accent:#35e0a1; --accent2:#4aa8ff; --muted:#8a97a6; }
+  * { margin:0; box-sizing:border-box; }
+  html,body { width:1280px; height:640px; }
+  body { background:#0a0e13; color:#e9eef5; font-family:"Space Grotesk",sans-serif;
+    position:relative; overflow:hidden; }
+  body::before { content:""; position:absolute; inset:0;
+    background: radial-gradient(50% 50% at 12% 0%, rgba(53,224,161,.16), transparent 70%),
+                radial-gradient(45% 50% at 95% 10%, rgba(74,168,255,.12), transparent 70%); }
+  .card { position:relative; height:100%; padding:72px 80px; display:flex; flex-direction:column; justify-content:space-between; }
+  .top { display:flex; align-items:center; gap:18px; }
+  .top img { width:64px; height:64px; }
+  .top .name { font-size:34px; font-weight:600; }
+  .top .tag { margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:16px; color:var(--accent); letter-spacing:.12em; text-transform:uppercase; }
+  h1 { font-size:76px; font-weight:700; letter-spacing:-.02em; line-height:1.03; max-width:1000px; }
+  .lede { font-size:26px; color:#cfd8e3; max-width:900px; margin-top:20px; }
+  .chips { display:flex; gap:12px; margin-top:28px; }
+  .chip { font-family:"JetBrains Mono",monospace; font-size:17px; color:var(--muted); border:1px solid rgba(255,255,255,.14); border-radius:30px; padding:9px 18px; }
+  .chip.on { color:var(--accent); border-color:rgba(53,224,161,.5); }
+  .bottom { display:flex; align-items:center; justify-content:space-between; }
+  .install { font-family:"JetBrains Mono",monospace; font-size:22px; background:#0e141c; border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:14px 22px; }
+  .install b { color:var(--accent); }
+  .lic { font-family:"JetBrains Mono",monospace; font-size:16px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <img src="kakapo-mark.svg" alt="" />
+      <div class="name">blue-kakapo</div>
+      <div class="tag">open-source agentic SOC</div>
+    </div>
+    <div>
+      <h1>The agentic SOC that shows its work.</h1>
+      <div class="lede">Evidence-cited Tier-1 triage, a replayable ledger, and containment that always asks first. Self-hosted · model-agnostic · human-in-the-loop.</div>
+      <div class="chips">
+        <span class="chip on">No API key (offline)</span>
+        <span class="chip">14-agent swarm</span>
+        <span class="chip">Reports its false-negative rate</span>
+        <span class="chip">Air-gap ready</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="install">uv sync &amp;&amp; uv run <b>bk serve</b></div>
+      <div class="lic">Apache-2.0 · github.com/dibakshya01/blue-kakapo</div>
+    </div>
+  </div>
+</body>
+</html>

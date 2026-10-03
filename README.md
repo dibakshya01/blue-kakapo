@@ -1,18 +1,41 @@
 <div align="center">
 
+<img src="docs/assets/social-card.jpg" alt="blue-kakapo — the agentic SOC that shows its work" width="760" />
+
 # 🦜 blue-kakapo
 
 **An open-source, self-hostable, agentic SOC platform for trustworthy Tier-1 triage.**
 *A transparent coworker for L2/L3 analysts — not a black box that acts alone.*
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-2bc389.svg)](pyproject.toml)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](build-plan.md)
+[![Self-hosted](https://img.shields.io/badge/self--hosted-in--network-2bc389.svg)](#quickstart)
+[![Model-agnostic](https://img.shields.io/badge/LLM-model--agnostic-4aa8ff.svg)](docs/providers.md)
+[![Honesty](https://img.shields.io/badge/reports-false--negative--rate-ff5c5c.svg)](docs/eval.md)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-35e0a1.svg)](CONTRIBUTING.md)
+
+[**Website**](https://dibakshya01.github.io/blue-kakapo/) · [Docs](docs/index.md) · [Plain-English overview](docs/what-it-can-and-cannot-do.md) · [Architecture](docs/architecture.md)
 
 </div>
 
 > **Status:** early, active development. The architecture and staged plan are in
 > [`build-plan.md`](build-plan.md); the research behind it is in [`finding.md`](finding.md).
+
+---
+
+## The pitch, in six lines
+
+| | |
+|---|---|
+| **Problem** | SOCs drown in alerts; most go uninvestigated; the scariest miss is a real threat hidden in the noise. |
+| **Idea** | A swarm of specialized agents does the Tier-1 first pass — fast **and** transparent. |
+| **What's inside** | 14 agents + orchestrator · Guardian safety gate · replayable crypto-shred ledger · opt-in memory · model-agnostic gateway. |
+| **How it works** | Deterministic spine, bounded LLM reasoning, every action gated and recorded. |
+| **Proof** | 138 tests, an adversarial suite, and an eval harness that reports the **false-negative rate** — no unaudited numbers. |
+| **Get started** | `uv sync && uv run bk serve` — offline, no API key, data stays local. |
+
+<div align="center"><img src="docs/assets/dashboard.jpg" alt="blue-kakapo coworker dashboard — a malicious verdict with cited cross-agent evidence and a verified ledger trail" width="820" /></div>
 
 ---
 

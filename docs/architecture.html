@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>blue-kakapo — architecture</title>
+<meta name="description" content="How blue-kakapo works: a deterministic kernel, a Guardian gate, a replayable ledger, pluggable memory, and a model-agnostic provider gateway." />
+<link rel="icon" href="assets/kakapo-mark.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="site.css" />
+<style>
+  .diagram { background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin: 20px 0; }
+  .diagram text { font-family: var(--mono); fill: var(--text); }
+  .dbox { fill: var(--surface2); stroke: var(--line2); }
+  .daccent { fill: rgba(53,224,161,.12); stroke: rgba(53,224,161,.5); }
+  .dflow { stroke: var(--muted); stroke-width: 1.5; marker-end: url(#arrow); fill: none; }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="index.html"><img src="assets/kakapo-mark.svg" alt="" /> blue-kakapo</a>
+  <button class="navtoggle" aria-label="Menu">☰</button>
+  <nav>
+    <a data-page="index.html" href="index.html">Home</a>
+    <a data-page="eli5.html" href="eli5.html">Plain English</a>
+    <a data-page="docs.html" href="docs.html">Docs</a>
+    <a data-page="architecture.html" href="architecture.html">Architecture</a>
+    <a data-page="contact.html" href="contact.html">Contact</a>
+    <a class="gh" href="https://github.com/dibakshya01/blue-kakapo">GitHub ↗</a>
+  </nav>
+</div></header>
+
+<main class="wrap prose" style="padding-top:48px; max-width:900px;">
+  <div class="kicker">Architecture</div>
+  <h1>A deterministic spine you can audit.</h1>
+  <p class="lede">LLMs do scoped reasoning; a typed state machine drives the flow; a Guardian gates every action; everything lands in a replayable ledger.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 860 300" width="100%" role="img" aria-label="blue-kakapo data-flow pipeline">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#8a97a6"/>
+        </marker>
+      </defs>
+      <!-- row 1: pipeline -->
+      <g font-size="12" text-anchor="middle">
+        <rect class="dbox" x="12"  y="24" width="120" height="46" rx="9"/><text x="72"  y="44">Connectors</text><text x="72" y="60" font-size="10" fill="#8a97a6">SIEM/EDR/MCP</text>
+        <rect class="dbox" x="162" y="24" width="120" height="46" rx="9"/><text x="222" y="44">Normalize</text><text x="222" y="60" font-size="10" fill="#8a97a6">→ OCSF</text>
+        <rect class="daccent" x="312" y="18" width="150" height="58" rx="10"/><text x="387" y="40" fill="#35e0a1">Orchestrator</text><text x="387" y="56" font-size="10" fill="#8a97a6">deterministic kernel</text>
+        <rect class="dbox" x="492" y="24" width="150" height="46" rx="9"/><text x="567" y="44">Agents (14)</text><text x="567" y="60" font-size="10" fill="#8a97a6">bounded LLM</text>
+        <rect class="daccent" x="672" y="24" width="120" height="46" rx="9"/><text x="732" y="44" fill="#35e0a1">Guardian</text><text x="732" y="60" font-size="10" fill="#8a97a6">ACS gate</text>
+        <path class="dflow" d="M132 47 H160"/><path class="dflow" d="M282 47 H310"/><path class="dflow" d="M462 47 H490"/><path class="dflow" d="M642 47 H670"/>
+      </g>
+      <!-- row 2: supporting -->
+      <g font-size="11" text-anchor="middle">
+        <rect class="dbox" x="312" y="110" width="150" height="40" rx="9"/><text x="387" y="134">Provider gateway</text>
+        <rect class="dbox" x="492" y="110" width="150" height="40" rx="9"/><text x="567" y="134">Memory (opt-in)</text>
+        <rect class="dbox" x="672" y="110" width="120" height="40" rx="9"/><text x="732" y="134">Connectors.act</text>
+        <path class="dflow" d="M387 76 V108"/><path class="dflow" d="M567 72 V108"/><path class="dflow" d="M732 72 V108"/>
+      </g>
+      <!-- ledger bar -->
+      <g text-anchor="middle">
+        <rect x="12" y="190" width="780" height="44" rx="10" fill="rgba(74,168,255,.10)" stroke="rgba(74,168,255,.45)"/>
+        <text x="402" y="210" font-size="12" fill="#4aa8ff">Case Ledger — append-only · hash-chained · crypto-shredded · replayable</text>
+        <text x="402" y="226" font-size="10" fill="#8a97a6">every node, tool call, model call, decision &amp; approval is recorded here</text>
+      </g>
+      <!-- cross-cutting -->
+      <text x="402" y="262" font-size="11" text-anchor="middle" fill="#8a97a6">Cross-cutting: AuthN/Z (OIDC · SCIM · RBAC · per-tenant) · Secrets (OpenBao) · OpenTelemetry</text>
+      <text x="402" y="284" font-size="11" text-anchor="middle" fill="#8a97a6">Control plane: FastAPI + WebSocket  ·  Coworker dashboard: React</text>
+    </svg>
+  </div>
+
+  <h2>The triage flow</h2>
+  <p><code class="inline">intake → L1 → (auto-close | investigate: INTEL + L2 + FUSION) → route</code>. Triage is
+  read-only. Response is a separate, explicit, Guardian-gated path — never auto-run. The kernel
+  checkpoints after every node and supports human-in-the-loop suspend/resume that re-enters the exact node.</p>
+
+  <h2>Design principles (as constraints)</h2>
+  <div class="grid c2" style="margin-top:18px;">
+    <div class="card"><h3>Trust is the product</h3><p>Evidence-cited, replayable verdicts. We ship an eval harness that reports the false-negative rate — not a marketing number.</p></div>
+    <div class="card"><h3>Deterministic spine, bounded intelligence</h3><p>A typed checkpointed kernel drives flow; LLMs are confined to scoped reasoning after deterministic enrichment — controlling hallucination and cost.</p></div>
+    <div class="card"><h3>Human-in-the-loop; least privilege</h3><p>Every state-changing action is Guardian-gated (allow/deny/modify/ask/defer, default ask), blast-radius-limited, reversible, audited.</p></div>
+    <div class="card"><h3>In-network &amp; model-agnostic</h3><p>Localhost or air-gapped K8s; any provider; opt-in memory; no telemetry phone-home.</p></div>
+  </div>
+
+  <h2>Where controls sit</h2>
+  <ul>
+    <li><strong>Egress gate:</strong> the Guardian is the only path from a proposed action to a connector — deny / ask (maker-checker) / modify (e.g. add a containment TTL) / allow.</li>
+    <li><strong>Untrusted boundary:</strong> all alert/log/intel/tool content is data, never instructions; agent outputs are schema-validated; the Rule of Two is enforced at agent construction.</li>
+    <li><strong>Audit:</strong> a per-tenant, hash-chained ledger; GDPR erasure via crypto-shredding keeps the chain verifiable.</li>
+  </ul>
+
+  <p style="margin-top:24px;">Full spec: <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/build-plan.md">build-plan.md</a> ·
+  <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/docs/security-model.md">security model &amp; AISVS self-assessment</a>.</p>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <div class="muted">blue-kakapo · open-source agentic SOC · Apache-2.0</div>
+  <div style="display:flex; gap:22px; flex-wrap:wrap;"><a href="https://github.com/dibakshya01/blue-kakapo">GitHub</a><a href="docs.html">Docs</a><a href="contact.html">Contact</a></div>
+</div></footer>
+<script src="site.js"></script>
+</body>
+</html>

@@ -343,3 +343,28 @@ context; INSIDER runs under privacy controls. ✅  **All 14 agents now deeply im
 
 **Phase 3 build complete (Arcs 1–3).** Next: Phase 4 (site + deck), Phase 5 (≥3 adversarial hardening
 rounds), Phase 6 (handoff).
+
+---
+
+## Phase 4 — Website + deck + assets ✅ (2026-10-03)
+
+**Design system ("Night Watch", via master-designer):** deep-night canvas, one concept-driven
+signal-green/teal accent (`#35e0a1`) + blue-team cyan (`#4aa8ff`) + verdict status colors; Space
+Grotesk / Inter / JetBrains Mono; a shield-with-watchful-gaze kākāpō mark; Swiss-modern dark + glow.
+
+**Shipped:**
+- **5-page GitHub Pages site** in `docs/` (shared `site.css` + `site.js` + `.nojekyll`): Home
+  (dark hero, one-command install + copy, proof chips, why/how/trust sections, live verdict mock),
+  **Plain-English** (ELI5 for leaders), **Docs** (quickstart, CLI/API/module map), **Architecture**
+  (inline SVG data-flow diagram + principles), **Contact** (community + responsible use).
+- **Logo mark** (`docs/assets/kakapo-mark.svg`) — monochrome-safe.
+- **Social card** 2:1 (`docs/assets/social-card.jpg`, 35 KB) + README artistic header, badge row,
+  product screenshot, and a six-line pitch deck.
+
+**Verified (empirically in-browser):** desktop + mobile (375px) renders; **no horizontal overflow**
+(`scrollWidth == innerWidth`); nav collapses to a toggle on mobile; fonts load; strong contrast; the
+architecture SVG renders. Screenshots captured for Home (desktop + mobile), the social card, and the
+dashboard.
+
+**This completes the first cut (build + site).** Handoff item added: upload the social card to the
+repo's Settings → Social preview, and enable GitHub Pages (Settings → Pages → `main`/`docs`).

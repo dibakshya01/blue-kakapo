@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>blue-kakapo — the open-source agentic SOC</title>
+<meta name="description" content="An open-source, self-hostable agentic SOC that triages Tier-1 alerts and shows its work. A transparent coworker for L2/L3 analysts — in-network, model-agnostic, human-in-the-loop." />
+<meta property="og:title" content="blue-kakapo — the open-source agentic SOC" />
+<meta property="og:description" content="Triage alerts fast and trustworthy. Evidence-cited verdicts, a replayable ledger, and containment that always asks first. Self-hosted, model-agnostic, Apache-2.0." />
+<meta property="og:image" content="assets/social-card.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="assets/kakapo-mark.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="site.css" />
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/kakapo-mark.svg" alt="" /> blue-kakapo</a>
+    <button class="navtoggle" aria-label="Menu">☰</button>
+    <nav>
+      <a data-page="index.html" href="index.html">Home</a>
+      <a data-page="eli5.html" href="eli5.html">Plain English</a>
+      <a data-page="docs.html" href="docs.html">Docs</a>
+      <a data-page="architecture.html" href="architecture.html">Architecture</a>
+      <a data-page="contact.html" href="contact.html">Contact</a>
+      <a class="gh" href="https://github.com/dibakshya01/blue-kakapo">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <div class="kicker">Open-source · self-hosted · Apache-2.0</div>
+    <h1>The agentic SOC that<br />shows its work.</h1>
+    <p class="lede">A swarm of specialized agents triages your Tier-1 alerts, cites its evidence, and keeps data in your network — a transparent coworker for L2/L3 analysts, not a black box that acts alone.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="docs.html">Get started →</a>
+      <a class="btn btn-ghost" href="https://github.com/dibakshya01/blue-kakapo">Star on GitHub</a>
+    </div>
+    <div class="install">
+      <code>uv&nbsp;sync&nbsp;&amp;&amp;&nbsp;uv&nbsp;run&nbsp;bk&nbsp;serve</code>
+      <button class="copybtn" data-copy="uv sync && uv run bk serve">copy</button>
+    </div>
+    <div class="badges">
+      <span class="chip on">No API key needed (offline mode)</span>
+      <span class="chip">Model-agnostic</span>
+      <span class="chip">Human-in-the-loop</span>
+      <span class="chip">Replayable ledger</span>
+      <span class="chip">Air-gap ready</span>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="glass" style="padding:20px; max-width:760px; margin:0 auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span class="mono muted" style="font-size:.78rem;">CASE · case_01M…52PB</span>
+        <span class="vbadge v-red">malicious → escalate · 90%</span>
+      </div>
+      <div class="mono" style="font-size:.84rem; color:#cfd8e3; line-height:1.9;">
+        <div><span style="color:var(--accent-2)">builtin-intel</span> &nbsp;198.51.100.23 matches a known-bad indicator &nbsp;<span class="muted">[malicious]</span></div>
+        <div><span style="color:var(--accent-2)">threat-intel</span> &nbsp;malware.example associated with known-malicious activity &nbsp;<span class="muted">[malicious]</span></div>
+        <div><span style="color:var(--accent-2)">attack-map</span> &nbsp;maps to ATT&amp;CK tactic: command-and-control &nbsp;<span class="muted">[context]</span></div>
+        <div style="color:var(--accent); margin-top:8px;">ledger verified ✓ · intake → l1 → investigate → route</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap reveal">
+    <div class="kicker">Why it exists</div>
+    <h2>SOCs are drowning — and the fixes are closed.</h2>
+    <div class="grid c3" style="margin-top:28px;">
+      <div class="card"><div class="ic">◴</div><h3>Too many alerts</h3><p>Teams face thousands of alerts a day; 40–63% are never investigated and ~40%+ are false positives. Analysts burn out; the best leave.</p></div>
+      <div class="card"><div class="ic">◱</div><h3>Slow is expensive</h3><p>Sub-200-day breach containment saves ~$1.9M, and regulators (DORA, NIS2, GDPR, SEC) start the clock at <em>awareness</em>.</p></div>
+      <div class="card"><div class="ic">◆</div><h3>The AI fixes are black boxes</h3><p>Every capable AI-SOC product is closed, cloud-only SaaS on opaque pricing — and the scariest failure is a missed real threat you can't see.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap reveal">
+    <div class="kicker">How it works</div>
+    <h2>A deterministic spine. Bounded intelligence. Always auditable.</h2>
+    <div class="steps" style="margin-top:28px;">
+      <div class="step"><div class="n">01 · ingest</div>Normalize any source to OCSF (webhook, syslog, Wazuh, Elastic, MCP).</div>
+      <div class="step"><div class="n">02 · triage</div>L1 enriches deterministically, then a bounded model reasons to a cited verdict.</div>
+      <div class="step"><div class="n">03 · investigate</div>INTEL · L2 · FUSION add context, SIEM pivots, and campaign correlation.</div>
+      <div class="step"><div class="n">04 · gate</div>Any containment passes the Guardian — allow/deny/modify/ask — human-approved.</div>
+      <div class="step"><div class="n">05 · record</div>Every step lands in a replayable, tamper-evident, GDPR-erasable ledger.</div>
+    </div>
+  </section>
+
+  <section class="wrap reveal">
+    <div class="kicker">What makes it trustworthy</div>
+    <div class="grid c2" style="margin-top:28px;">
+      <div class="card"><h3>Honest by design</h3><p>No unaudited accuracy numbers. We ship an evaluation harness that reports the <strong>false-negative rate</strong> on your own data — the metric others hide.</p></div>
+      <div class="card"><h3>Safe by construction</h3><p>Crown-jewel assets are never auto-isolated. Containment is maker-checker approved. Agents obey the <strong>Rule of Two</strong>. Guardrails map to OWASP LLM/Agentic/AISVS & NIST.</p></div>
+      <div class="card"><h3>Yours, end to end</h3><p>Runs on localhost or air-gapped Kubernetes. Any LLM — Anthropic, OpenAI, Azure, or local <strong>Ollama</strong> — switchable anytime. No telemetry phone-home. Ever.</p></div>
+      <div class="card"><h3>Standards-anchored</h3><p>OCSF · STIX/TAXII · Sigma · MITRE ATT&amp;CK &amp; D3FEND · OWASP · NIST SP 800-53. Signed images + SBOM. OIDC · SCIM · multi-tenant.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap reveal" style="text-align:center;">
+    <h2>Stand it up in 60 seconds.</h2>
+    <p class="lede" style="margin:12px auto 24px;">Offline by default — no key, no data leaving your machine. Connect your systems when you're ready.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="docs.html">Read the docs →</a>
+      <a class="btn btn-ghost" href="eli5.html">Explain it simply</a>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div><a class="brand" href="index.html" style="font-size:1rem;"><img src="assets/kakapo-mark.svg" alt="" style="width:20px" /> blue-kakapo</a><div class="muted" style="margin-top:8px;">Open-source agentic SOC · Apache-2.0</div></div>
+    <div style="display:flex; gap:22px; flex-wrap:wrap;">
+      <a href="https://github.com/dibakshya01/blue-kakapo">GitHub</a>
+      <a href="docs.html">Docs</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/dibakshya01/blue-kakapo/blob/main/SECURITY.md">Security</a>
+      <a href="contact.html">Contact</a>
+    </div>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

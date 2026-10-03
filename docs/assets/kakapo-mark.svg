@@ -1,0 +1,20 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="blue-kakapo mark">
+  <defs>
+    <linearGradient id="bkg" x1="24" y1="12" x2="104" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35e0a1"/>
+      <stop offset="1" stop-color="#2b9ff0"/>
+    </linearGradient>
+  </defs>
+  <!-- Defender shield -->
+  <path d="M64 8 L108 24 V62 C108 92 90 112 64 120 C38 112 20 92 20 62 V24 Z"
+        fill="#0e141c" stroke="url(#bkg)" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Watchful owl-parrot gaze (two eyes) -->
+  <circle cx="49" cy="58" r="12.5" fill="#0a0e13" stroke="url(#bkg)" stroke-width="3.5"/>
+  <circle cx="79" cy="58" r="12.5" fill="#0a0e13" stroke="url(#bkg)" stroke-width="3.5"/>
+  <circle cx="49" cy="58" r="4.4" fill="#35e0a1"/>
+  <circle cx="79" cy="58" r="4.4" fill="#35e0a1"/>
+  <!-- Beak / facial-disc tuft -->
+  <path d="M64 70 L58 80 H70 Z" fill="url(#bkg)"/>
+  <!-- Ground line = the "watch" horizon -->
+  <path d="M44 94 H84" stroke="url(#bkg)" stroke-width="3.5" stroke-linecap="round" opacity="0.55"/>
+</svg>
