@@ -55,9 +55,9 @@ tamper-evident case ledger.
 
 ## What makes it different
 
-- **Trust is the product.** Every verdict is evidence-cited and replayable from an immutable case
-  ledger. We ship an **evaluation harness that reports the false-negative rate** instead of a
-  marketing accuracy number.
+- **Trust is the product.** Every verdict is evidence-cited and replayable from a **tamper-evident**
+  (hash-chained, append-only) case ledger. We ship an **evaluation harness that reports the
+  false-negative rate** instead of a marketing accuracy number.
 - **Deterministic spine, bounded intelligence.** A typed, checkpointed state machine drives the flow;
   LLMs are confined to scoped reasoning tasks after deterministic enrichment. Controls hallucination
   and cost.

@@ -17,6 +17,7 @@ from ..assets import AssetInventory, resolve_entities
 from ..connectors import ConnectorRegistry
 from ..core import (
     CaseRepo,
+    CryptoShredder,
     Done,
     Engine,
     EventBus,
@@ -25,7 +26,9 @@ from ..core import (
     Ledger,
     RunContext,
     Store,
+    erase_case_pii,
     new_run_id,
+    protect_case_pii,
 )
 from ..core.kernel import NodeResult
 from ..guardian import GuardedExecutor
@@ -86,6 +89,8 @@ class TriageOrchestrator:
         self.gateway = gateway
         self.bus = bus or EventBus()
         self.ledger = ledger or Ledger(store)
+        # PII at rest: raw payloads are crypto-shred-tokenized before a case is ever persisted.
+        self.shredder = CryptoShredder(store)
         self.engine = Engine(store, self.ledger, self.bus)
         self.repo = CaseRepo(store)
         self.memory = memory
@@ -261,6 +266,8 @@ class TriageOrchestrator:
             alerts=[alert],
             memory_enabled=memory_enabled,
         )
+        # Tokenize raw payloads BEFORE the first persist, so no raw PII is ever written to cases.data.
+        protect_case_pii(case, self.shredder)
         self.repo.save(case)
         ctx: RunContext[TriageState] = RunContext(
             run_id=new_run_id(),
@@ -312,6 +319,27 @@ class TriageOrchestrator:
         )
         self.repo.save(case)
         return case
+
+    def erase_case(self, case_id: str) -> dict[str, Any]:
+        """GDPR subject-erasure: crypto-shred the case's raw blobs and redact PII-flagged fields.
+
+        The append-only ledger is untouched (it holds no PII) and still verifies afterwards. An
+        ``case.erased`` entry is appended so the erasure itself is auditable.
+        """
+        case = self.repo.get(case_id)
+        if case is None:
+            raise ValueError(f"unknown case {case_id!r}")
+        report = erase_case_pii(case, self.shredder)
+        case.erased_at = utcnow()
+        self.repo.save(case)
+        self.ledger.append(
+            tenant_id=case.tenant_id,
+            action="case.erased",
+            actor="system",
+            actor_id="dpo",
+            case_id=case.id,
+        )
+        return {"case_id": case.id, "erased_at": case.erased_at.isoformat(), **report}
 
     @staticmethod
     async def _noop_emit(action: str, **kw: Any) -> None:

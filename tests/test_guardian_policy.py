@@ -25,17 +25,34 @@ def test_irreversible_requires_approval() -> None:
     assert disp.decision == ACSDisposition.ASK
 
 
-def test_containment_gets_ttl_modify() -> None:
+def test_containment_on_normal_asset_asks_two_humans_with_ttl() -> None:
+    # Containment is high-impact: ASK (never auto-MODIFY) even on a normal/unknown asset, with the
+    # TTL carried as the effective action approvers will run. Two humans required.
     disp = PolicyEngine().decide(_d("isolate_host"))
-    assert disp.decision == ACSDisposition.MODIFY
+    assert disp.decision == ACSDisposition.ASK
+    assert disp.required_approvals == 2
     assert disp.modified_action is not None
     assert disp.modified_action.args.get("ttl_seconds") == 3600
 
 
 def test_crown_jewel_isolate_asks_with_two_approvals() -> None:
     disp = PolicyEngine().decide(_d("isolate_host", asset_criticality=AssetCriticality.CROWN_JEWEL))
-    assert disp.decision == ACSDisposition.ASK  # ask beats the ttl-modify by precedence
+    assert disp.decision == ACSDisposition.ASK
     assert disp.required_approvals == 2
+
+
+def test_all_high_impact_verbs_require_two_humans_on_normal_assets() -> None:
+    # The core "human-in-the-loop by default" guarantee: no high-impact verb auto-executes.
+    for verb in (
+        "isolate_host",
+        "disable_user",
+        "kill_process",
+        "quarantine_file",
+        "firewall_drop",
+    ):
+        disp = PolicyEngine().decide(_d(verb))
+        assert disp.decision == ACSDisposition.ASK, verb
+        assert disp.required_approvals == 2, verb
 
 
 def test_capability_gate_denies_unsupported() -> None:
@@ -50,10 +67,9 @@ def test_blast_radius_over_cap_asks() -> None:
     assert disp.decision == ACSDisposition.ASK
 
 
-def test_default_is_ask_when_no_policy_decisive() -> None:
-    # A high-impact but reversible action on a normal asset with no connector gate... still gets ttl
-    # modify for containment, but a non-containment high-impact reversible verb (quarantine_file is
-    # irreversible, disable_user is high-impact reversible) -> disable_user is high-impact, not
-    # containment, reversible -> no allow (high impact), no modify (not containment) -> default ask.
+def test_high_impact_non_containment_asks() -> None:
+    # disable_user is high-impact but not containment: ASK with two approvals, no TTL rewrite.
     disp = PolicyEngine().decide(_d("disable_user"))
     assert disp.decision == ACSDisposition.ASK
+    assert disp.required_approvals == 2
+    assert disp.modified_action is None

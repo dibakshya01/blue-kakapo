@@ -38,6 +38,13 @@ class Authenticator:
         self._user_store: object | None = None  # optional SCIM UserStore for deprovision checks
         self._oidc: OIDCVerifier | None = None
         if settings.oidc_issuer and settings.oidc_jwks_url:
+            if not settings.oidc_audience:
+                # Fail closed: without an expected audience, a token minted for *another* relying
+                # party on the same issuer would be accepted (confused-deputy). Refuse to start.
+                raise AuthError(
+                    "OIDC is configured but BK_OIDC_AUDIENCE is unset; audience verification must "
+                    "not be disabled. Set the audience to this service's client id."
+                )
             self._oidc = OIDCVerifier(
                 issuer=settings.oidc_issuer,
                 jwks_url=settings.oidc_jwks_url,

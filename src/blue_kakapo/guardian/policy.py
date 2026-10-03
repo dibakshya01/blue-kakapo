@@ -52,20 +52,42 @@ def capability_gate(d: DecisionInput) -> Disposition | None:
     return None
 
 
-def crown_jewel_guard(d: DecisionInput) -> Disposition | None:
-    if d.action.verb in HIGH_IMPACT_VERBS and d.asset_criticality in (
-        AssetCriticality.CRITICAL,
-        AssetCriticality.CROWN_JEWEL,
-    ):
-        approvals = 2 if d.asset_criticality == AssetCriticality.CROWN_JEWEL else 1
-        return Disposition(
-            decision=ACSDisposition.ASK,
-            reason=f"{d.action.verb} on a {d.asset_criticality} asset requires human approval.",
-            policy_id="crown_jewel_guard",
-            required_approvals=approvals,
-            reversibility="reversible" if d.action.reversible else "irreversible",
-        )
-    return None
+def high_impact_guard(d: DecisionInput) -> Disposition | None:
+    """High-impact actions ALWAYS require two humans — on every asset, known or unknown.
+
+    This is the load-bearing "human-in-the-loop by default" guarantee. A high-impact verb
+    (isolate_host, disable_user, kill_process, quarantine_file, firewall_drop) is never
+    auto-executed, regardless of asset criticality — including the common case of an *unknown*
+    asset that defaults to ``normal``. The returned disposition is ``ask`` (not ``modify``), so a
+    TTL rewrite can never silently authorize execution: for open-ended containment we attach a
+    time-box as the *effective* action the approvers will run, but a human must still approve it.
+    """
+    if d.action.verb not in HIGH_IMPACT_VERBS:
+        return None
+    crit = (
+        f" on a {d.asset_criticality} asset"
+        if d.asset_criticality in (AssetCriticality.CRITICAL, AssetCriticality.CROWN_JEWEL)
+        else ""
+    )
+    modified = None
+    if d.action.verb in CONTAINMENT_VERBS and "ttl_seconds" not in d.action.args:
+        modified = d.action.model_copy(deep=True)
+        modified.args = {**d.action.args, "ttl_seconds": d.containment_ttl_seconds}
+    return Disposition(
+        decision=ACSDisposition.ASK,
+        reason=(
+            f"{d.action.verb}{crit} is high-impact; requires two-person approval"
+            + (
+                f" (time-boxed to {d.containment_ttl_seconds}s on approval)."
+                if modified is not None
+                else "."
+            )
+        ),
+        policy_id="high_impact_guard",
+        required_approvals=2,
+        reversibility="reversible" if d.action.reversible else "irreversible",
+        modified_action=modified,
+    )
 
 
 def blast_radius_guard(d: DecisionInput) -> Disposition | None:
@@ -97,21 +119,6 @@ def irreversible_guard(d: DecisionInput) -> Disposition | None:
     return None
 
 
-def containment_ttl_modify(d: DecisionInput) -> Disposition | None:
-    """Add an auto-expiry TTL to open-ended containment so it self-reverses pending review."""
-    if d.action.verb in CONTAINMENT_VERBS and "ttl_seconds" not in d.action.args:
-        modified = d.action.model_copy(deep=True)
-        modified.args = {**d.action.args, "ttl_seconds": d.containment_ttl_seconds}
-        return Disposition(
-            decision=ACSDisposition.MODIFY,
-            reason=f"Time-boxed containment: auto-expire after {d.containment_ttl_seconds}s.",
-            policy_id="containment_ttl_modify",
-            reversibility="reversible",
-            modified_action=modified,
-        )
-    return None
-
-
 def low_impact_allow(d: DecisionInput) -> Disposition | None:
     """Allow clearly low-risk, reversible, non-high-impact actions outright."""
     if (
@@ -130,10 +137,9 @@ def low_impact_allow(d: DecisionInput) -> Disposition | None:
 
 DEFAULT_POLICIES: list[Policy] = [
     capability_gate,
-    crown_jewel_guard,
+    high_impact_guard,
     blast_radius_guard,
     irreversible_guard,
-    containment_ttl_modify,
     low_impact_allow,
 ]
 
@@ -165,5 +171,10 @@ class PolicyEngine:
                 reason="No policy was decisive; defaulting conservatively.",
                 policy_id="default",
             )
-        # Highest precedence wins; among equals, the first policy's opinion is kept.
-        return max(decisive, key=lambda o: _PRECEDENCE.get(o.decision, 0))
+        # Highest precedence wins; among equals, the one demanding the most approvals wins (so a
+        # high-impact two-person gate is never weakened by a co-decisive one-person opinion). Ties
+        # beyond that keep the earliest policy's opinion (and its modified_action).
+        return max(
+            decisive,
+            key=lambda o: (_PRECEDENCE.get(o.decision, 0), o.required_approvals),
+        )

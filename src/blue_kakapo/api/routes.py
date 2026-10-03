@@ -27,7 +27,9 @@ router = APIRouter(prefix="/api", tags=["triage"])
 _req_view = Depends(require(Permission.VIEW))
 _req_triage = Depends(require(Permission.TRIAGE))
 _req_respond = Depends(require(Permission.PROPOSE_RESPONSE))
+_req_approve = Depends(require(Permission.APPROVE_RESPONSE))
 _req_manage = Depends(require(Permission.MANAGE))
+_req_admin = Depends(require(Permission.ADMIN))
 
 
 class IngestRequest(BaseModel):
@@ -129,6 +131,61 @@ async def respond(
     )
 
 
+@router.post("/cases/{case_id}/erase")
+async def erase_case(
+    case_id: str, request: Request, principal: Principal = _req_admin
+) -> dict[str, Any]:
+    """GDPR subject-erasure: crypto-shred the case's raw blobs + redact PII. Ledger stays verifiable."""
+    _owned_case(request, case_id, principal)  # tenant check (404 cross-tenant)
+    return _orchestrator(request).erase_case(case_id)
+
+
+def _owned_approval(request: Request, approval_id: str, principal: Principal) -> dict[str, Any]:
+    """Load an approval and enforce tenant ownership (cross-tenant → 404)."""
+    row = request.app.state.store.get_approval(approval_id)
+    if row is None or row.get("tenant_id") != principal.tenant_id:
+        raise HTTPException(status_code=404, detail="approval not found")
+    return row
+
+
+@router.get("/approvals")
+async def list_approvals(
+    request: Request,
+    status: str | None = "pending",
+    principal: Principal = _req_view,
+) -> list[dict[str, Any]]:
+    """Pending maker-checker approvals for the tenant (the dashboard's approvals inbox)."""
+    rows = request.app.state.store.list_approvals(principal.tenant_id, status=status)
+    return [r["data"] for r in rows]
+
+
+@router.post("/approvals/{approval_id}/approve")
+async def approve_action(
+    approval_id: str, request: Request, principal: Principal = _req_approve
+) -> dict[str, Any]:
+    """Approve a gated action. High-impact actions need two DISTINCT approvers; a proposer can't
+    approve its own action. Executes only once enough distinct approvals are gathered."""
+    _owned_approval(request, approval_id, principal)
+    try:
+        result = await request.app.state.guardian.approve(approval_id, principal.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return result.model_dump(mode="json")
+
+
+@router.post("/approvals/{approval_id}/deny")
+async def deny_action(
+    approval_id: str, request: Request, principal: Principal = _req_approve
+) -> dict[str, Any]:
+    """Deny a gated action — it will never execute."""
+    _owned_approval(request, approval_id, principal)
+    try:
+        result = await request.app.state.guardian.deny(approval_id, principal.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return result.model_dump(mode="json")
+
+
 @router.get("/agents")
 async def list_agents(request: Request, _: Principal = _req_view) -> list[dict[str, Any]]:
     """The full agent roster with their AgBOMs (what each can touch)."""
@@ -208,14 +265,36 @@ async def memory_status(request: Request, principal: Principal = _req_view) -> d
     }
 
 
+def _confine_folder(folder: str, root: Any) -> str:
+    """Resolve a memory folder, optionally confining it under a configured root. Sync (does I/O)."""
+    from pathlib import Path
+
+    target = Path(folder).expanduser()
+    if root is not None:
+        root_resolved = Path(root).expanduser().resolve()
+        if not target.resolve().is_relative_to(root_resolved):
+            raise HTTPException(
+                status_code=400,
+                detail=f"folder must be under the configured memory root {root_resolved}",
+            )
+    return str(target)
+
+
 @router.post("/memory/link")
 async def memory_link(
     req: MemoryLinkRequest, request: Request, _: Principal = _req_manage
 ) -> dict[str, Any]:
-    """Create/link a local folder for case memory and switch the active backend to it (local mode)."""
+    """Create/link a local folder for case memory and switch the active backend to it (local mode).
+
+    When ``BK_MEMORY_ROOT`` is configured (recommended for shared deployments), the folder must
+    resolve under it — so an authenticated admin cannot point memory at arbitrary server paths.
+    NOTE: the active memory backend is process-global today (one per deployment), not per-tenant;
+    switching it affects every tenant on this instance. Per-tenant backends are on the roadmap.
+    """
     from ..memory import FolderMemoryBackend
 
-    backend = FolderMemoryBackend(req.folder)
+    target = _confine_folder(req.folder, request.app.state.settings.memory_root)
+    backend = FolderMemoryBackend(target)
     request.app.state.memory.backend = backend
     return {"backend": backend.name, "folder": str(backend.folder), "linked": True}
 

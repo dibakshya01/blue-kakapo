@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     memory_enabled_default: bool = False  # opt-in per case
     memory_backend: MemoryBackend = MemoryBackend.FOLDER
     memory_folder: Path | None = None  # the UI-linked system folder
+    memory_root: Path | None = Field(
+        default=None,
+        description=(
+            "If set, folders linked via the API must live under this base dir (defense against "
+            "pointing memory at arbitrary server paths in a shared deployment). Unset = localhost "
+            "trust: any path the process can write."
+        ),
+    )
 
     # --- guardian / safety ---
     guardian_default_disposition: str = "ask"  # never fail-open
@@ -86,6 +94,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8713  # "BK13" on a phone keypad; avoids common defaults
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    allow_insecure_bind: bool = Field(
+        default=False,
+        description="Permit binding a non-loopback host while auth is disabled (NOT recommended).",
+    )
 
     # --- auth / rbac (enterprise) ---
     auth_enabled: bool = (
@@ -104,6 +116,10 @@ class Settings(BaseSettings):
     # --- secrets ---
     secret_backend: str = "env"  # env | file | openbao
     secret_file: Path | None = None
+    secret_file_key: str | None = Field(
+        default=None,
+        description="Base64 AES-256 key for the 'file' backend; unset = plaintext JSON.",
+    )
     openbao_addr: str | None = None
     openbao_token: str | None = None
     openbao_mount: str = "secret"

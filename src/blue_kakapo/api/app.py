@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -22,13 +22,16 @@ from ..guardian import GuardedExecutor, Guardian
 from ..logging import configure_logging, get_logger, maybe_setup_otel
 from ..memory import MemoryService, build_memory_backend
 from ..providers import ProviderGateway
-from ..security import Authenticator, build_secret_store
+from ..security import Authenticator, Permission, Principal, build_secret_store, require
 from ..security.scim import UserStore
 from .routes import router
 from .scim import scim_router
 
 _STATIC_DIR = Path(__file__).parent / "static"  # fallback minimal UI
 _DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "web" / "dist"  # built React dashboard
+
+# Module-level DI singleton (avoids calling Depends/require in an argument default — ruff B008).
+_REQ_VIEW = Depends(require(Permission.VIEW))
 
 
 def create_app(settings: Settings | None = None, *, store: Store | None = None) -> FastAPI:
@@ -43,10 +46,15 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
         version=__version__,
         description="Open-source agentic SOC — a transparent coworker for L2/L3 analysts.",
     )
+    # A wildcard origin with credentials is a footgun (and browsers reject the combination); only
+    # allow credentials when the operator has pinned explicit origins.
+    cors_wildcard = "*" in settings.cors_origins
+    if cors_wildcard:
+        log.warning("cors_wildcard_origins", detail="allow_credentials forced off for '*' origins")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_credentials=not cors_wildcard,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -119,7 +127,7 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
         return {"name": "blue-kakapo", "version": __version__}
 
     @app.get("/api/provider", tags=["config"])
-    async def provider_status() -> dict:
+    async def provider_status(_: Principal = _REQ_VIEW) -> dict:
         return {
             "provider": gateway.provider_name,
             "model": gateway.model,

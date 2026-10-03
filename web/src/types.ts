@@ -51,6 +51,19 @@ export interface LedgerEntry {
   ts: string;
 }
 
+export interface Approval {
+  id: string;
+  case_id?: string | null;
+  action: { verb: string; target: string; args?: Record<string, unknown> };
+  proposer?: string | null;
+  reason: string;
+  required_approvals: number;
+  approvals_received: number;
+  approvers: string[];
+  status: string;
+  created_at: string;
+}
+
 export interface AgentInfo {
   name: string;
   autonomy_level: string;

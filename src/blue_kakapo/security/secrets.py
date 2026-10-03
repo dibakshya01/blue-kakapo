@@ -77,7 +77,13 @@ class OpenBaoSecretStore:
 def build_secret_store(settings: object) -> SecretStore:
     backend = getattr(settings, "secret_backend", "env")
     if backend == "file" and getattr(settings, "secret_file", None):
-        return FileSecretStore(Path(settings.secret_file))  # type: ignore[attr-defined]
+        key: bytes | None = None
+        raw_key = getattr(settings, "secret_file_key", None)
+        if raw_key:
+            import base64
+
+            key = base64.b64decode(raw_key)
+        return FileSecretStore(Path(settings.secret_file), key=key)  # type: ignore[attr-defined]
     if backend == "openbao" and getattr(settings, "openbao_addr", None):
         return OpenBaoSecretStore(
             settings.openbao_addr,  # type: ignore[attr-defined]

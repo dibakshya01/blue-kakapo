@@ -12,8 +12,10 @@ it's a bug in this doc.
   ledger** you can verify.
 - **Investigate & correlate**: pull connector enrichment + SIEM queries (L2), map ATT&CK context
   (INTEL), cluster related cases by shared entities (FUSION).
-- **Gate response**: propose containment (RESP) that is **always** Guardian-checked and
-  human-approved for anything high-impact; never auto-isolate crown-jewel assets.
+- **Gate response**: propose containment (RESP) that is **always** Guardian-checked. Every
+  high-impact action (isolate/disable/kill/quarantine/firewall) needs **two distinct human
+  approvers** on *any* asset — a proposer can't approve its own action — so nothing is ever
+  auto-isolated, crown jewel or not.
 - **Run proactive & service work**: early warning, hypothesis hunts, detection-coverage gaps + Sigma
   drafts, exposure (KEV/CVSS) prioritization, privacy-gated insider signals, summaries, incident &
   compliance reports, pipeline-health checks, and **regulatory-clock tracking** (DORA/NIS2/GDPR/SEC).

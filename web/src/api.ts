@@ -1,4 +1,4 @@
-import type { AgentInfo, Case, EvalReport, LedgerEntry } from "./types";
+import type { AgentInfo, Approval, Case, EvalReport, LedgerEntry } from "./types";
 
 async function j<T>(url: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(url, opts);
@@ -27,6 +27,11 @@ export const api = {
       headers: JSON_HEADERS,
       body: JSON.stringify({ dry_run }),
     }),
+  approvals: (status = "pending") => j<Approval[]>(`/api/approvals?status=${status}`),
+  approve: (id: string) =>
+    j<{ status: string; detail: string }>(`/api/approvals/${id}/approve`, { method: "POST" }),
+  deny: (id: string) =>
+    j<{ status: string; detail: string }>(`/api/approvals/${id}/deny`, { method: "POST" }),
   agents: () => j<AgentInfo[]>("/api/agents"),
   evaluate: () => j<EvalReport>("/api/eval"),
   memoryStatus: () => j<{ backend: string; count: number; embedding_model: string }>("/api/memory/status"),

@@ -36,15 +36,31 @@ async def test_low_impact_allow_executes_and_is_ledgered() -> None:
     assert ledger.verify("t1") is True
 
 
-async def test_containment_is_modified_with_ttl() -> None:
+async def test_containment_on_normal_asset_requires_two_humans_never_auto_executes() -> None:
+    """Regression for the round-1 critical: a high-impact containment on a NORMAL (or unknown)
+    asset must ASK for two humans — a TTL modify must never silently authorize execution."""
     ex, edr, _, _ = _setup()
     res = await ex.execute(
         Action(tenant_id="t1", verb="isolate_host", target="host-7"), case_id="c1"
     )
-    assert res.disposition.decision == "modify"
+    # ASK, not MODIFY: no auto-execution on a normal/unknown asset.
+    assert res.disposition.decision == "ask"
+    assert res.status == "pending_approval"
+    assert res.disposition.required_approvals == 2
+    assert "host-7" not in edr.isolated_hosts  # nothing ran
+    # The TTL is carried as the *effective* action the approvers will run (modify composes with ask).
     assert res.disposition.modified_action.args.get("ttl_seconds") == 3600
-    assert res.status == "ok"
+
+    # Two distinct humans are required; the TTL'd action runs only after the second.
+    r1 = await ex.approve(res.approval_id, "alice")
+    assert r1.status == "pending_approval"
+    assert "host-7" not in edr.isolated_hosts
+    r2 = await ex.approve(res.approval_id, "bob")
+    assert r2.status == "ok"
     assert "host-7" in edr.isolated_hosts
+    # The executed action was the containment (approval ran the stored effective action).
+    assert edr.action_log[-1].verb == "isolate_host"
+    assert edr.action_log[-1].target == "host-7"
 
 
 async def test_crown_jewel_isolate_requires_two_approvals() -> None:

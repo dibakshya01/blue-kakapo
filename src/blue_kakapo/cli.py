@@ -41,21 +41,48 @@ def _cmd_info(_: argparse.Namespace) -> int:
     return 0
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", ""}
+
+
+def _is_loopback(host: str) -> bool:
+    return host.strip().lower() in _LOOPBACK_HOSTS
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     s = get_settings()
     configure_logging(level=s.log_level, json_logs=s.log_json)
+    host = args.host or s.api_host
+    # Refuse to expose an unauthenticated control plane on the network. With auth disabled every
+    # request runs as local-admin, so a non-loopback bind would hand the SOC to anyone who can reach
+    # the port. Enable auth (BK_AUTH_ENABLED=1) or, to override explicitly, --insecure / BK_ALLOW_INSECURE_BIND=1.
+    if (
+        not s.auth_enabled
+        and not _is_loopback(host)
+        and not (args.insecure or s.allow_insecure_bind)
+    ):
+        print(
+            f"refusing to bind {host!r} with auth disabled — this would expose an unauthenticated "
+            "admin API on the network.\n"
+            "Fix one of:\n"
+            "  • set BK_AUTH_ENABLED=1 (recommended) and configure tokens/OIDC, or\n"
+            "  • bind loopback (127.0.0.1), or\n"
+            "  • pass --insecure / set BK_ALLOW_INSECURE_BIND=1 if you truly intend this.",
+            file=sys.stderr,
+        )
+        return 2
     get_logger("blue_kakapo.cli").info(
         "serving",
-        host=args.host or s.api_host,
+        host=host,
         port=args.port or s.api_port,
         provider=s.provider.value,
+        auth_enabled=s.auth_enabled,
     )
     uvicorn.run(
         "blue_kakapo.api:create_app",
         factory=True,
-        host=args.host or s.api_host,
+        host=host,
         port=args.port or s.api_port,
         reload=args.reload,
     )
@@ -119,6 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--reload", action="store_true")
+    serve.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Allow a non-loopback bind with auth disabled (NOT recommended).",
+    )
     serve.set_defaults(func=_cmd_serve)
 
     triage = sub.add_parser("triage", help="Triage one alert from a JSON file (or '-' for stdin).")

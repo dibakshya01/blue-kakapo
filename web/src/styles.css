@@ -32,6 +32,7 @@ a { color: var(--blue); }
 .nav { margin-left: auto; display: flex; gap: 6px; }
 .nav button { background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px; padding: 6px 12px; }
 .nav button.active { color: var(--text); background: var(--panel); border-color: var(--line); }
+.nav button .count { margin-left: 6px; background: var(--amber); color: #2a1a00; border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 600; }
 
 .body { flex: 1; overflow: hidden; display: flex; }
 .col { overflow: auto; padding: 16px; }

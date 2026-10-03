@@ -23,7 +23,8 @@ from .policy import DecisionInput, PolicyEngine
 class ApprovalRequest(TenantScoped):
     id: str
     case_id: str | None = None
-    action: Action
+    action: Action  # the EFFECTIVE action approvers authorize (e.g. a TTL-boxed containment)
+    proposer: str | None = None  # the agent/actor that proposed it — may NOT approve its own action
     reason: str = ""
     required_approvals: int = 1
     approvals_received: int = 0
@@ -92,6 +93,7 @@ class GuardedExecutor:
         self.registry = registry
         self.ledger = ledger
         self.store = store
+        self._in_flight = 0  # state-changing actions currently executing (feeds blast-radius guard)
 
     def _ledger(
         self, action: str, *, tenant_id: str, case_id: str | None, disposition: str | None = None
@@ -120,7 +122,7 @@ class GuardedExecutor:
             actor_roles=actor_roles,
             confidence=confidence,
             case_id=case_id,
-            in_flight=in_flight,
+            in_flight=in_flight + self._in_flight,
         )
         self._ledger(
             f"guardian.disposition:{action.verb}:{disp.decision}",
@@ -133,11 +135,16 @@ class GuardedExecutor:
             return ExecutionResult(status="denied", disposition=disp, detail=disp.reason)
 
         if disp.decision in (ACSDisposition.ASK, ACSDisposition.DEFER):
+            # The approvers authorize the EFFECTIVE action: a modify-rewrite (e.g. a TTL-boxed
+            # containment) when the policy attached one, else the original. A modify can therefore
+            # never bypass the human gate for a high-impact verb — it only shapes what gets run.
+            effective = disp.modified_action or action
             approval = ApprovalRequest(
                 tenant_id=action.tenant_id,
                 id=new_id("appr"),
                 case_id=case_id,
-                action=action,
+                action=effective,
+                proposer=action.proposed_by,
                 reason=disp.reason,
                 required_approvals=disp.required_approvals or 1,
                 created_at=utcnow(),
@@ -176,7 +183,11 @@ class GuardedExecutor:
                 status="denied", disposition=disp, detail="no connector for action"
             )
         connector, _ = found
-        result = await connector.act(action, dry_run=dry_run or action.dry_run)
+        self._in_flight += 1
+        try:
+            result = await connector.act(action, dry_run=dry_run or action.dry_run)
+        finally:
+            self._in_flight -= 1
         self._ledger(
             f"action.executed:{action.verb}:{result.status}",
             tenant_id=action.tenant_id,
@@ -194,6 +205,8 @@ class GuardedExecutor:
         appr = ApprovalRequest.model_validate(row["data"])
         if appr.status != "pending":
             raise ValueError(f"approval {approval_id!r} is {appr.status}")
+        if appr.proposer is not None and approver_id == appr.proposer:
+            raise ValueError("maker-checker: the proposer may not approve its own action")
         if approver_id in appr.approvers:
             raise ValueError("duplicate approver (two-person rule)")
         appr.approvers.append(approver_id)

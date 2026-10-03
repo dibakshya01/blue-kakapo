@@ -133,6 +133,9 @@ class Case(TenantScoped):
     cost: CostAccounting = Field(default_factory=CostAccounting)
     created_at: _dt.datetime = Field(default_factory=utcnow)
     updated_at: _dt.datetime = Field(default_factory=utcnow)
+    erased_at: _dt.datetime | None = Field(
+        default=None, description="Set when PII was subject-erased (crypto-shred + redaction)."
+    )
 
     def add_evidence(self, ev: Evidence) -> None:
         self.evidence.append(ev)

@@ -368,3 +368,54 @@ dashboard.
 
 **This completes the first cut (build + site).** Handoff item added: upload the social card to the
 repo's Settings → Social preview, and enable GitHub Pages (Settings → Pages → `main`/`docs`).
+
+---
+
+## Phase 5 — Adversarial hardening
+
+### Round 1 ✅ (2026-10-03) — fresh memory-free `adversarial-code-review` subagent
+
+Verdict: *"Genuinely impressive architecture and unusually honest docs, but three headline
+safety/privacy promises were falsified in the running code."* Suite was green (138 tests) but the
+reviewer earned its keep. Findings triaged and **all fixed**, each with a fail-before/pass-after
+attack-test. Suite now **145 tests**, `ruff`/`ruff format`/`mypy` (75 files) clean, `tsc`+`vite` clean.
+
+**🔴 Criticals (pure misses — fixed):**
+1. **GDPR crypto-shred was never wired.** `CryptoShredder` existed but ingest never called it, so raw
+   alert payloads (SSNs, free-text notes, emails) were persisted verbatim in `cases.data`. Fixed:
+   new `core/pii.py` tokenizes every raw payload at ingest (`protect_case_pii`, called in
+   `TriageOrchestrator.triage_alert` before the first persist) → the case at rest holds a
+   `{_pii_ref: token}`, plaintext lives only as AES-GCM ciphertext. Added `erase_case` +
+   `POST /api/cases/{id}/erase` (admin) that crypto-shreds raw blobs **and** redacts PII-flagged
+   observables/entities; ledger stays PII-free and verifies. Docs corrected to be precise about what
+   is tokenized vs. redacted. Test: `test_raw_pii_is_tokenized_at_rest_and_erasable`.
+2. **High-impact containment auto-executed on normal/unknown assets.** The old `containment_ttl_modify`
+   returned `MODIFY`, which `GuardedExecutor` ran immediately — so `isolate_host`/`firewall_drop` on a
+   `normal` (or unknown→normal) asset fired with no human. Fixed: replaced crown-jewel + ttl-modify
+   policies with a single `high_impact_guard` → **ASK with two approvers on every asset**; the TTL is
+   carried as the *effective* action the approvers run (modify composes with ask, never replaces it).
+   Tests: `test_containment_on_normal_asset_requires_two_humans_never_auto_executes`,
+   `test_all_high_impact_verbs_require_two_humans_on_normal_assets`,
+   `test_containment_on_unknown_asset_never_auto_executes`.
+3. **Maker-checker loop was unreachable.** `approve()/deny()` existed but no route/UI called them.
+   Fixed: `GET /api/approvals`, `POST /api/approvals/{id}/approve|deny` (gated by `approve_response`),
+   plus an **Approvals** inbox tab in the dashboard (approve/deny, live count badge). Tests:
+   `test_maker_checker_approval_flow_via_api`, `test_maker_checker_blocks_self_approval_and_single_approver`.
+
+**🟡 Moderates (fixed):** proposer may no longer approve its own action (maker≠checker) + **all**
+high-impact actions require **two** distinct approvers; injection/`as_untrusted`/unsafe-output guards
+wired into L1 (untrusted content wrapped as data; injection markers force escalate-not-auto-close;
+unsafe model output withheld); OIDC now **fails closed** when `oidc_audience` is unset
+(confused-deputy); `memory/link` folder confinement via `BK_MEMORY_ROOT` + documented that the
+provider/memory backends are process-global today (per-tenant on the roadmap); `bk serve` **refuses a
+non-loopback bind while auth is disabled** (`--insecure`/`BK_ALLOW_INSECURE_BIND` to override);
+README/plan/site "immutable" → **"tamper-evident"**. Tests: `test_oidc_without_audience_fails_closed`,
+`test_serve_refuses_non_loopback_bind_without_auth`.
+
+**⚪ Minors (fixed):** `/api/provider` now requires `view`; CORS drops `allow_credentials` under a
+`*` origin; `FileSecretStore` key wired from `BK_SECRET_FILE_KEY`; real in-flight-action counter feeds
+the blast-radius guard; `contains_unsafe_output` is now live (was dead code).
+
+**Not changed (accepted/roadmap):** WS token in query string (browsers can't set WS headers; tenant
+still enforced); per-tenant provider/memory backends (documented as process-global); MCP fingerprint
+field coverage. Carried into round 2.

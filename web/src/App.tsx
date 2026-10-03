@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, openEventStream } from "./api";
-import type { AgentInfo, Case, EvalReport, LedgerEntry } from "./types";
+import type { AgentInfo, Approval, Case, EvalReport, LedgerEntry } from "./types";
 
 const SAMPLES: Record<string, unknown> = {
   malicious: { title: "Outbound connection to known C2", severity: "high", rule_name: "C2 beacon detected", src_ip: "10.0.0.14", dst_ip: "198.51.100.23", host: "WS-14", user: "svc-web", domain: "malware.example", attack_techniques: ["T1071"], message: "Host contacted malware.example over HTTPS" },
@@ -18,10 +18,11 @@ function Badge({ text, cls }: { text: string; cls: string }) {
 }
 
 export function App() {
-  const [tab, setTab] = useState<"cases" | "agents" | "settings">("cases");
+  const [tab, setTab] = useState<"cases" | "approvals" | "agents" | "settings">("cases");
   const [provider, setProvider] = useState<{ provider: string; offline: boolean } | null>(null);
   const [connected, setConnected] = useState(false);
   const [cases, setCases] = useState<Case[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
   const refreshCases = useCallback(async () => {
@@ -29,15 +30,24 @@ export function App() {
       setCases(await api.cases());
     } catch { /* ignore */ }
   }, []);
+  const refreshApprovals = useCallback(async () => {
+    try {
+      setApprovals(await api.approvals());
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     api.provider().then(setProvider).catch(() => setProvider(null));
     refreshCases();
-    const ws = openEventStream(() => refreshCases());
+    refreshApprovals();
+    const ws = openEventStream(() => {
+      refreshCases();
+      refreshApprovals();
+    });
     ws.onopen = () => setConnected(true);
     ws.onclose = () => setConnected(false);
     return () => ws.close();
-  }, [refreshCases]);
+  }, [refreshCases, refreshApprovals]);
 
   return (
     <div className="app">
@@ -47,9 +57,10 @@ export function App() {
         <span className="tag">{provider ? `provider: ${provider.provider}${provider.offline ? " (offline)" : ""}` : "…"}</span>
         <span className="tag">Tier-1 triage · coworker</span>
         <div className="nav">
-          {(["cases", "agents", "settings"] as const).map((t) => (
+          {(["cases", "approvals", "agents", "settings"] as const).map((t) => (
             <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
               {t[0].toUpperCase() + t.slice(1)}
+              {t === "approvals" && approvals.length > 0 && <span className="count">{approvals.length}</span>}
             </button>
           ))}
         </div>
@@ -58,6 +69,7 @@ export function App() {
         {tab === "cases" && (
           <CasesView cases={cases} selected={selected} onSelect={setSelected} onChanged={refreshCases} />
         )}
+        {tab === "approvals" && <ApprovalsView approvals={approvals} onChanged={refreshApprovals} />}
         {tab === "agents" && <AgentsView />}
         {tab === "settings" && <SettingsView onProvider={setProvider} />}
       </div>
@@ -135,9 +147,9 @@ function CaseDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
   if (!c) return <div className="card"><h2>Case detail</h2><div className="empty">Loading…</div></div>;
   const v = c.verdict;
 
-  const runRespond = async () => {
+  const runRespond = async (dryRun: boolean) => {
     setResponding(true);
-    try { await api.respond(id, true); await load(); await onChanged(); } finally { setResponding(false); }
+    try { await api.respond(id, dryRun); await load(); await onChanged(); } finally { setResponding(false); }
   };
 
   return (
@@ -160,10 +172,13 @@ function CaseDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
           {c.cost.usd > 0 && <span className="tag">cost ${c.cost.usd.toFixed(4)}</span>}
         </div>
         <div className="row mt">
-          <button className="btn warn" onClick={runRespond} disabled={responding}>
+          <button className="btn" onClick={() => runRespond(true)} disabled={responding}>
             {responding ? "Running…" : "Run response (dry-run)"}
           </button>
-          <span className="muted" style={{ fontSize: 12 }}>Containment is Guardian-gated & human-approved.</span>
+          <button className="btn warn" onClick={() => runRespond(false)} disabled={responding}>
+            Propose containment →
+          </button>
+          <span className="muted" style={{ fontSize: 12 }}>High-impact actions open a two-person approval in the <strong>Approvals</strong> tab.</span>
         </div>
       </div>
 
@@ -184,6 +199,52 @@ function CaseDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
         </div>
       </div>
     </>
+  );
+}
+
+function ApprovalsView({ approvals, onChanged }: { approvals: Approval[]; onChanged: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const act = async (id: string, kind: "approve" | "deny") => {
+    setBusy(id + kind); setErr(null);
+    try {
+      await (kind === "approve" ? api.approve(id) : api.deny(id));
+      await onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="full">
+      <h2>Approvals — maker-checker queue</h2>
+      <p className="muted" style={{ fontSize: 13, marginTop: -6 }}>
+        High-impact containment needs <strong>two distinct approvers</strong>; a proposer can't approve its own action.
+        Every decision is recorded in the ledger.
+      </p>
+      {err && <div className="card" style={{ borderColor: "var(--red)" }}><span className="b-red badge">error</span> {err}</div>}
+      {approvals.length === 0 && <div className="card"><div className="empty">No pending approvals. Gated actions appear here when a response proposes high-impact containment.</div></div>}
+      <div className="grid">
+        {approvals.map((a) => (
+          <div className="card" key={a.id}>
+            <div className="row spread">
+              <strong>{a.action.verb}</strong>
+              <Badge text={`${a.approvals_received}/${a.required_approvals} approvals`} cls={a.approvals_received >= a.required_approvals ? "b-green" : "b-amber"} />
+            </div>
+            <div className="kv"><span className="k">target</span><span style={{ fontFamily: "var(--mono)" }}>{a.action.target}</span></div>
+            <div className="kv"><span className="k">proposed by</span><span>{a.proposer ?? "—"}</span></div>
+            {a.case_id && <div className="kv"><span className="k">case</span><span style={{ fontFamily: "var(--mono)", fontSize: 11 }}>{a.case_id}</span></div>}
+            <div className="muted" style={{ fontSize: 12, margin: "6px 0" }}>{a.reason}</div>
+            {a.approvers.length > 0 && <div className="muted" style={{ fontSize: 11 }}>approvers: {a.approvers.join(", ")}</div>}
+            <div className="row mt">
+              <button className="btn" onClick={() => act(a.id, "approve")} disabled={busy !== null}>Approve</button>
+              <button className="btn warn" onClick={() => act(a.id, "deny")} disabled={busy !== null}>Deny</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
