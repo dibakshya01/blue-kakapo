@@ -19,6 +19,20 @@ uv run mypy                 # types
 
 All four must pass before a PR merges (CI enforces it on Python 3.11 and 3.12).
 
+### The dashboard (`web/`)
+
+The coworker dashboard is React + Vite + TypeScript. The built assets in `web/dist/` are committed so
+`bk serve` serves the dashboard with no Node step. To change it:
+
+```bash
+cd web
+npm install
+npm run dev      # hot-reload against a running `bk serve` (API proxied to :8713)
+npm run build    # rebuild web/dist (commit the result)
+```
+
+If `web/dist/` is absent, `bk serve` falls back to a minimal built-in UI.
+
 ## Ground rules
 
 - **Spec-first.** Behavior changes start in [`build-plan.md`](build-plan.md), then the code. New

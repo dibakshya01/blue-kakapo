@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from ..agents import TriageOrchestrator
@@ -24,7 +24,8 @@ from ..memory import MemoryService, build_memory_backend
 from ..providers import ProviderGateway
 from .routes import router
 
-_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR = Path(__file__).parent / "static"  # fallback minimal UI
+_DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "web" / "dist"  # built React dashboard
 
 
 def create_app(settings: Settings | None = None, *, store: Store | None = None) -> FastAPI:
@@ -117,14 +118,16 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
             "tenant_default": settings.default_tenant,
         }
 
-    @app.get("/", response_class=HTMLResponse, tags=["ui"])
-    async def index() -> FileResponse:
-        return FileResponse(_STATIC_DIR / "index.html")
+    # Serve the built React dashboard if present, else the minimal fallback UI. Mounted LAST so API
+    # routes always take precedence over the SPA catch-all.
+    ui_dir = _DASHBOARD_DIR if _DASHBOARD_DIR.is_dir() else _STATIC_DIR
+    app.mount("/", StaticFiles(directory=str(ui_dir), html=True), name="ui")
 
     log.info(
         "api_initialized",
         version=__version__,
         provider=gateway.provider_name,
         offline=gateway.provider_name == "offline",
+        ui="dashboard" if ui_dir == _DASHBOARD_DIR else "minimal",
     )
     return app

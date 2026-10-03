@@ -15,8 +15,8 @@ __pycache__/
 *$py.class
 *.egg-info/
 .eggs/
-dist/
-build/
+/dist/
+/build/
 .venv/
 venv/
 env/

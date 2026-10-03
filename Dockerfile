@@ -15,6 +15,7 @@ WORKDIR /app
 # Install dependencies first (layer-cached), then the project.
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY web/dist ./web/dist
 RUN uv sync --no-dev --extra postgres --extra otel
 
 # Non-root runtime user.

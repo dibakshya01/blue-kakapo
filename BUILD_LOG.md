@@ -221,3 +221,30 @@ labeled floor; `/api/agents`, `/api/eval`, `/api/cases/{id}/respond` all work. r
 **Exit check (S6):** end-to-end alert→triage→investigate→correlate→context→verdict (evidence +
 confidence); RESP containment gated + reversible (dry-run + mock EDR); harness reports precision/
 recall/**FNR**/cost on the documented bundled dataset (labeled illustrative). ✅
+
+---
+
+## S7 — Scale + coworker dashboard ✅ (2026-10-03)
+
+**Shipped:** backpressure + live updates + runtime controls, and the React coworker dashboard.
+- Backend: orchestrator **concurrency semaphore** (backpressure, FR-34); **ledger threading lock**
+  serializing hash-chained appends (fixed a real race the load test caught); `/api/ws` live
+  tenant-filtered events; `/api/provider/switch` (runtime); `/api/provider/ollama/pull` (NDJSON
+  bootstrap stream).
+- Frontend (`web/`, **React + Vite + TypeScript**, built to `web/dist`, served by FastAPI): dark
+  "analyst console" dashboard — **Cases** (live inbox + triage box with memory toggle; coworker detail
+  = verdict card, ATT&CK chips, cited evidence timeline, replayable reasoning trace with "ledger
+  verified ✓", gated "Run response (dry-run)"); **Agents** (roster with AgBOM + Rule-of-Two legs);
+  **Settings** (provider switch, memory status, run-eval panel showing the FNR). WebSocket live
+  refresh. App serves the built dashboard if present, else the minimal fallback UI.
+
+**Verified:** `uv run pytest` → **109 passed** (4 new). Load/flood: **60 concurrent cases, peak
+concurrency ≤ cap (8), lossless, ledger verifies** on a file-backed store (production concurrency path).
+Live events; provider switch; ws connect. `npm run build` → dashboard built (154 KB JS). **Live
+browser check:** dashboard renders; malicious case shows verdict + 10 cross-agent cited evidence items
++ verified trace; Agents roster shows Rule-of-Two per agent. ruff + mypy (61 files) + tsc clean.
+
+**Exit check (S7):** ≥5k alerts/day flood stays bounded; full triage loop usable from the UI; live
+updates; approvals/respond actionable; provider switch from UI; dark theme. ✅
+
+**This completes Arc 1 (first public release: S0–S7 + core-5 + honest eval).**
