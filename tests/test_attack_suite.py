@@ -6,6 +6,7 @@ hostile stranger would try to bypass; they are guarded here so they can't silent
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 
 import pytest
@@ -257,6 +258,64 @@ async def test_erasure_scrubs_evidence_query_and_approvals() -> None:
     for r in store.list_approvals("t1"):  # the approvals table outlives the case — scrub it too
         assert "victim@acme.com" not in json.dumps(r["data"])
     assert Ledger(store).verify("t1") is True
+
+
+# GDPR (round-5 🟡-1) — erasure redacts a case's approvals even when they fall outside the recent-N
+# window of list_approvals (a busy tenant with >200 approvals; erasures usually target older cases).
+async def test_erasure_redacts_approvals_beyond_recent_window() -> None:
+    store = Store.in_memory()
+    reg = ConnectorRegistry()
+    reg.register(MockSIEM())
+    reg.register(MockEDR())
+    inv = AssetInventory(store)
+    ledger = Ledger(store)
+    guardian = GuardedExecutor(Guardian(inv, reg), reg, ledger, store)
+    orch = TriageOrchestrator(
+        store, _gw(), ledger=ledger, registry=reg, inventory=inv, guardian=guardian
+    )
+    case = await orch.triage_alert(
+        {
+            "title": "malware beacon",
+            "severity": "high",
+            "user": "old-victim@acme.com",
+            "message": "malware exfil from account",
+        },
+        tenant_id="t1",
+    )
+    await orch.respond(case.id, dry_run=False)  # approval with target=old-victim@acme.com
+
+    # Flood 250 newer, unrelated approvals so the case's approval falls outside the recent-200 window.
+    base = _dt.datetime.now(_dt.UTC)
+    for i in range(250):
+        ts = base + _dt.timedelta(seconds=i + 1)
+        store.insert_approval(
+            {
+                "id": f"appr_pad_{i}",
+                "tenant_id": "t1",
+                "case_id": f"other_{i}",
+                "status": "pending",
+                "created_at": ts,
+                "data": {
+                    "id": f"appr_pad_{i}",
+                    "tenant_id": "t1",
+                    "case_id": f"other_{i}",
+                    "action": {"verb": "block_ioc", "target": "203.0.113.9", "args": {}},
+                    "reason": "x",
+                    "required_approvals": 1,
+                    "approvals_received": 0,
+                    "approvers": [],
+                    "status": "pending",
+                    "created_at": ts.isoformat(),
+                },
+            }
+        )
+    # The case's approval is genuinely outside the recent-200 window...
+    recent = store.list_approvals("t1")
+    assert not any("old-victim@acme.com" in json.dumps(r["data"]) for r in recent)
+    # ...yet erasure still redacts it (queries by the indexed case_id column, unbounded).
+    await orch.erase_case(case.id)
+    for r in store.list_approvals_by_case("t1", case.id):
+        assert "old-victim@acme.com" not in json.dumps(r["data"])
 
 
 # Verdict steering (round-3 🟡-F4, round-4 F4) — homoglyph folding is LOAD-BEARING: the same alert that

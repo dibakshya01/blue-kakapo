@@ -435,6 +435,15 @@ class Store:
         with self.engine.begin() as conn:
             return [dict(r) for r in conn.execute(q).mappings().all()]
 
+    def list_approvals_by_case(self, tenant_id: str, case_id: str) -> list[dict[str, Any]]:
+        """All approvals for a case (unbounded, via the indexed case_id column) — used by erasure so
+        an older case's approval PII is never missed behind the recent-N window."""
+        q = select(approvals).where(
+            approvals.c.tenant_id == tenant_id, approvals.c.case_id == case_id
+        )
+        with self.engine.begin() as conn:
+            return [dict(r) for r in conn.execute(q).mappings().all()]
+
     # --- memory ---
 
     def upsert_memory(self, values: dict[str, Any]) -> None:
@@ -455,13 +464,14 @@ class Store:
             conn.execute(delete(memory).where(memory.c.id == record_id))
 
     def query_memory(
-        self, tenant_id: str, filters: dict[str, str] | None = None, limit: int = 1000
+        self, tenant_id: str, filters: dict[str, str] | None = None, limit: int | None = 1000
     ) -> list[dict[str, Any]]:
         q = select(memory).where(memory.c.tenant_id == tenant_id)
         for key in ("technique", "severity", "outcome", "trust_tier"):
             if filters and key in filters:
                 q = q.where(getattr(memory.c, key) == filters[key])
-        q = q.limit(limit)
+        if limit is not None:  # None = unbounded (erasure must see every record)
+            q = q.limit(limit)
         with self.engine.begin() as conn:
             return [dict(r) for r in conn.execute(q).mappings().all()]
 

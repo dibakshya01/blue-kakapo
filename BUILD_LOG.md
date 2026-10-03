@@ -539,3 +539,34 @@ also assert the `checkpoints` table is PII-free (it now fails without the F1 fix
 **⚪ F6 — body-size middleware is Content-Length-only** (a chunked request without the header isn't
 caught by the global cap; the per-route 413 and uvicorn limits remain). Left as documented
 defense-in-depth; a streaming byte cap is the follow-up if a hard bound is required.
+
+### Round 5 ✅ (2026-10-03) — fresh memory-free adversarial reviewer (FINAL / protocol cap)
+
+Verdict: **essentially clean.** The reviewer built a worst-case PII-everywhere case, fully wired
+(SIEM+EDR+Guardian+inventory+SQL-memory), triaged + responded + memory-enabled, erased, then dumped
+**all 10 tables** and grepped every PII value. Result matrix: `cases` (incl. the `title` *column*),
+`ledger`, `checkpoints`, `crypto_keys`, `crypto_blobs` (ciphertext unrecoverable), `assets`,
+`asset_identifiers`, `memory`, `users` — all clean/handled. Round-4 fixes all hold (checkpoint delete
+is tenant+case scoped, non-resumable-after-erase is clean, homoglyph fold is load-bearing and
+casefolds uppercase, no false-escalation storm, no ReDoS). Invariants (Guardian sole path, two-person,
+tenant 404, OIDC fail-closed, ledger-verifies-after-erase, SCIM stable-id) all re-confirmed. Docs
+judged "honest to a fault" — the non-NER caveat precisely predicts the one acknowledged residue.
+
+One genuine completeness bug on the recurring theme, now fixed:
+**🟡-1 — approval redaction was capped at the recent 200 rows.** `_redact_case_approvals` used
+`list_approvals(status=None)` (ordered desc, limit 200), so in a busy tenant (>200 approvals) an older
+erased case's `disable_user` target (a user email) survived in the API-readable `approvals` table —
+and erasures usually target older cases. Fixed: added `store.list_approvals_by_case` (queries the
+indexed `case_id` column, unbounded) and `_redact_case_approvals` now uses it. Regression:
+`test_erasure_redacts_approvals_beyond_recent_window` floods 250 newer approvals, asserts the case's
+approval is outside the recent-200 window, then asserts erasure still redacts it.
+**⚪-1 (parallel, fixed):** `SqlMemoryBackend.delete_by_case` was bounded at 1000 (`query_memory`
+default); now passes `limit=None` (unbounded) so a >1000-record tenant can't retain an erased case's
+memory. (The default folder backend was already complete.)
+**⚪-2 (acknowledged, no change):** non-NER free-text residue (a plain display name) — exactly the
+documented scope; hard-delete is the stronger guarantee.
+
+**Phase 5 complete — 5 adversarial rounds (≥3 required; continued while rounds surfaced material
+findings; round 5 came back essentially clean).** Final: **153 tests**, `ruff` + `ruff format` +
+`mypy` (75 files) + `tsc`/`vite` all clean. Every round's findings + fixes are logged above; every fix
+carries a fail-before/pass-after attack-test.

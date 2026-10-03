@@ -63,7 +63,8 @@ class SqlMemoryBackend:
 
     async def delete_by_case(self, tenant_id: str, case_id: str) -> int:
         deleted = 0
-        for r in self.store.query_memory(tenant_id):
+        # Unbounded scan (limit=None): erasure must see every record, not just the recent 1000.
+        for r in self.store.query_memory(tenant_id, limit=None):
             rec = MemoryRecord.model_validate(r["data"])
             if rec.case_id == case_id:
                 self.store.delete_memory(rec.id)

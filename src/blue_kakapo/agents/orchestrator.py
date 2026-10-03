@@ -364,12 +364,14 @@ class TriageOrchestrator:
         }
 
     def _redact_case_approvals(self, tenant_id: str, case_id: str, pii_values: set[str]) -> int:
-        """Redact PII from a case's approval rows (target/args/reason) — they outlive the case."""
+        """Redact PII from a case's approval rows (target/args/reason) — they outlive the case.
+
+        Queries by the indexed ``case_id`` column (unbounded) so an older case's approvals are never
+        missed behind the recent-N window of ``list_approvals``.
+        """
         redacted = 0
-        for row in self.store.list_approvals(tenant_id, status=None):
+        for row in self.store.list_approvals_by_case(tenant_id, case_id):
             data = row.get("data") or {}
-            if data.get("case_id") != case_id:
-                continue
             action = data.get("action") or {}
             action["target"], _ = redact_pii_text(action.get("target"), pii_values)
             args = action.get("args") or {}
