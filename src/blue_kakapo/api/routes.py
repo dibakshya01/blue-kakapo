@@ -131,9 +131,9 @@ async def respond(
 
 @router.get("/agents")
 async def list_agents(request: Request, _: Principal = _req_view) -> list[dict[str, Any]]:
-    """The core-5 agent roster with their AgBOMs (what each can touch)."""
+    """The full agent roster with their AgBOMs (what each can touch)."""
     orch = _orchestrator(request)
-    agents = [orch.l1, orch.intel, orch.l2, orch.fusion, orch.resp]
+    agents = orch.roster
     return [
         {
             "name": a.name,

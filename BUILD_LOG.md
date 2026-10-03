@@ -279,3 +279,29 @@ package defined. ✅  *(SAML via an OIDC-bridging proxy — Keycloak/oauth2-prox
 pattern; native SAML is roadmap.)*
 
 **This completes Arc 2 (enterprise GA).**
+
+---
+
+## S9 — Full agent roster ✅ (2026-10-03)
+
+**Shipped (Arc 3):** the remaining 9 agents, each on the Agent SDK (AgBOM, Rule-of-Two, deterministic-
+first, evidence-cited) + their supporting data.
+- `compliance.py` — regulatory clocks (DORA 4h/24h, NIS2 24h/72h, GDPR 72h, SEC 4bd) from *awareness*.
+- `vuln_feed.py` (sample CVE/KEV) + `detections.py` (detection inventory + Sigma skeleton generator).
+- Proactive (`agents/proactive.py`): **WATCH** (burst/early-warning over recent cases), **HUNT**
+  (hypothesis→query via escape hatch), **DET** (ATT&CK coverage gaps + proposed Sigma, human-merged),
+  **VULN** (KEV/CVSS × asset × active-threat prioritization), **INSIDER** (privacy-gated UEBA signal).
+- Service ops (`agents/serviceops.py`): **COMMS** (summary + human-sent external draft), **RPT**
+  (incident report incl. clocks + cost), **MAINT** (connector/pipeline health + decay), **MGR**
+  (sets regulatory clocks on the case + prioritization).
+- Orchestrator exposes the full **14-agent roster** + `run_agent_on_case(name, ...)` for scheduled/
+  on-demand ops; `/api/agents` now lists all 14 with AgBOM + Rule-of-Two.
+
+**Verified:** `uv run pytest` → **129 passed** (11 new). Highlights: 14 agents construct (Rule-of-Two
+all satisfied); WATCH burst; HUNT query; DET gap→Sigma; VULN KEV-first; INSIDER privacy-minimized;
+COMMS external draft (not sent); RPT report w/ clocks; MAINT flags an unhealthy connector; **MGR sets
+DORA/NIS2/GDPR/SEC clocks**; compliance only for reportable verdicts. ruff + mypy (74 files) clean.
+
+**Exit check (S9):** each remaining agent meets the §4.6 depth bar with its acceptance test; MGR tracks
+regulatory clocks; DET proposes a Sigma rule + coverage delta; VULN prioritizes by active-threat
+context; INSIDER runs under privacy controls. ✅  **All 14 agents now deeply implemented.**

@@ -39,8 +39,10 @@ from .fusion import FusionAgent
 from .intel import IntelAgent
 from .l1 import L1Agent
 from .l2 import L2Agent
+from .proactive import DetAgent, HuntAgent, InsiderAgent, VulnAgent, WatchAgent
 from .resp import RespAgent
 from .sdk import Agent, AgentOutput, AgentServices
+from .serviceops import CommsAgent, MaintAgent, MgrAgent, RptAgent
 
 
 class TriageState(BaseModel):
@@ -99,7 +101,57 @@ class TriageOrchestrator:
         self.l2 = L2Agent()
         self.fusion = FusionAgent()
         self.resp = RespAgent()
+        # The remaining roster (proactive + service ops), available on-demand / scheduled.
+        self.watch = WatchAgent()
+        self.hunt = HuntAgent()
+        self.det = DetAgent()
+        self.vuln = VulnAgent()
+        self.insider = InsiderAgent()
+        self.comms = CommsAgent()
+        self.rpt = RptAgent()
+        self.maint = MaintAgent()
+        self.mgr = MgrAgent()
+        self.roster: list[Agent] = [
+            self.l1,
+            self.watch,
+            self.l2,
+            self.fusion,
+            self.intel,
+            self.hunt,
+            self.det,
+            self.vuln,
+            self.insider,
+            self.resp,
+            self.comms,
+            self.rpt,
+            self.maint,
+            self.mgr,
+        ]
         self.graph = self._build_graph()
+
+    def agent(self, name: str) -> Agent | None:
+        return next((a for a in self.roster if a.name == name.upper()), None)
+
+    async def run_agent_on_case(self, name: str, case: Case, **options: Any) -> AgentOutput:
+        """Run any roster agent on a case (for scheduled/on-demand ops). Persists the mutated case."""
+        agent = self.agent(name)
+        if agent is None:
+            raise ValueError(f"unknown agent {name!r}")
+        services = AgentServices(
+            tenant_id=case.tenant_id,
+            gateway=self.gateway,
+            emit=self._noop_emit,
+            registry=self.registry,
+            inventory=self.inventory,
+            guardian=self.guardian,
+            memory=self.memory,
+            repo=self.repo,
+            options=options,
+        )
+        out = await agent.run(case, services)
+        _merge(case, out)
+        self.repo.save(case)
+        return out
 
     def _services(self, ctx: RunContext[TriageState], **options: Any) -> AgentServices:
         async def emit(action: str, **kw: Any) -> None:
