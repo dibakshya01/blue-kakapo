@@ -1,22 +1,29 @@
 """FastAPI control-plane application factory.
 
-S0 ships the operational surface: health, readiness, version, and a provider/settings summary (with
-secrets redacted). Ingestion, cases, verdicts, approvals, and the WebSocket stream are layered on in
-later stages.
+Wires the shared services (store, ledger, bus, provider gateway, triage orchestrator), the triage
+routes, the ops endpoints, and the minimal case UI. Offline by default — no key, no external calls.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 
 from .. import __version__
+from ..agents import TriageOrchestrator
 from ..config import Settings, get_settings
+from ..core import CaseRepo, EventBus, Ledger, Store
 from ..logging import configure_logging, get_logger, maybe_setup_otel
 from ..providers import ProviderGateway
+from .routes import router
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, store: Store | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
     if settings.otel_enabled:
@@ -36,9 +43,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    store = store or Store.from_settings(settings)
     gateway = ProviderGateway(settings)
+    bus = EventBus()
+    ledger = Ledger(store)
+    repo = CaseRepo(store)
+    orchestrator = TriageOrchestrator(store, gateway, bus=bus, ledger=ledger)
+
     app.state.settings = settings
+    app.state.store = store
     app.state.gateway = gateway
+    app.state.bus = bus
+    app.state.ledger = ledger
+    app.state.repo = repo
+    app.state.orchestrator = orchestrator
+
+    app.include_router(router)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict:
@@ -46,7 +66,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/readyz", tags=["ops"])
     async def readyz() -> dict:
-        # Readiness is intentionally conservative; later stages add DB/connector checks.
         return {"ready": True, "provider": gateway.provider_name}
 
     @app.get("/version", tags=["ops"])
@@ -55,7 +74,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/provider", tags=["config"])
     async def provider_status() -> dict:
-        """Current provider config, with secrets redacted — powers the settings UI."""
         return {
             "provider": gateway.provider_name,
             "model": gateway.model,
@@ -63,6 +81,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "offline": gateway.provider_name == "offline",
             "tenant_default": settings.default_tenant,
         }
+
+    @app.get("/", response_class=HTMLResponse, tags=["ui"])
+    async def index() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "index.html")
 
     log.info(
         "api_initialized",

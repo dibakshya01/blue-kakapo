@@ -1,12 +1,14 @@
 """The ``blue-kakapo`` / ``bk`` command-line entry point.
 
-S0 commands: ``version``, ``info`` (show resolved config, redacted), ``serve`` (run the API).
-Later stages add ``triage``, ``ollama bootstrap``, ``eval``, etc.
+Commands: ``version``, ``info`` (redacted config), ``serve`` (run the API), ``triage`` (triage one
+alert from a JSON file or stdin). Later stages add ``ollama bootstrap``, ``eval``, etc.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import json
 import sys
 
 from . import __version__
@@ -60,6 +62,38 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_triage(args: argparse.Namespace) -> int:
+    from .agents import TriageOrchestrator
+    from .core import Store
+    from .providers import ProviderGateway
+
+    s = get_settings()
+    configure_logging(level=s.log_level, json_logs=s.log_json)
+    if args.file == "-":
+        raw_text = sys.stdin.read()
+    else:
+        with open(args.file, encoding="utf-8") as fh:
+            raw_text = fh.read()
+    alert = json.loads(raw_text)
+
+    store = Store.from_settings(s)
+    orch = TriageOrchestrator(store, ProviderGateway(s))
+    case = asyncio.run(
+        orch.triage_alert(alert, tenant_id=args.tenant or s.default_tenant, source=args.source)
+    )
+    v = case.verdict
+    print(f"case:     {case.id}")
+    print(f"title:    {case.title}")
+    print(f"state:    {case.state}")
+    if v:
+        print(
+            f"verdict:  {v.verdict_class}  (routing: {v.routing}, confidence: {v.confidence:.0%})"
+        )
+        print(f"rationale:{v.rationale}")
+        print(f"evidence: {len(case.evidence)} item(s)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="blue-kakapo", description="Open-source agentic SOC.")
     parser.add_argument("--version", action="version", version=f"blue-kakapo {__version__}")
@@ -73,6 +107,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--reload", action="store_true")
     serve.set_defaults(func=_cmd_serve)
+
+    triage = sub.add_parser("triage", help="Triage one alert from a JSON file (or '-' for stdin).")
+    triage.add_argument("file", help="Path to a JSON alert, or '-' to read stdin.")
+    triage.add_argument("--tenant", default=None)
+    triage.add_argument("--source", default="cli")
+    triage.set_defaults(func=_cmd_triage)
 
     return parser
 

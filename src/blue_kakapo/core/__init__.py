@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .bus import Event, EventBus
+from .cases import CaseRepo
 from .crypto import CryptoShredder
 from .kernel import (
     Done,
@@ -24,6 +25,7 @@ from .store import Store
 
 __all__ = [
     "Store",
+    "CaseRepo",
     "Ledger",
     "GENESIS_HASH",
     "compute_hash",

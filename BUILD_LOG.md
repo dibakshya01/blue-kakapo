@@ -66,3 +66,36 @@ share the DB; added a 30s busy timeout for file SQLite.
 
 **Exit check (S1):** graph runs/persists/resumes into the exact node; ledger hash-chain verifies;
 replay reconstructs the path; crypto-shred erases a record without breaking the chain. ✅
+
+---
+
+## S2 — Walking skeleton (first vertical slice) ✅ (2026-10-03)
+
+**Shipped:** the first end-to-end triage loop — ingest → OCSF-normalize → L1 verdict → ledger →
+minimal UI, offline-capable.
+- `normalize.py` — source-agnostic normalizer: generic alert → OCSF `Event`/`Alert`, observable
+  extraction (ip/user/host/domain/url/hash) + PII flagging, severity coercion, raw retained.
+- `intel_builtin.py` — tiny built-in indicator set for offline enrichment (RFC-5737/RFC-2606 reserved
+  values only — no real host implicated); clearly not a threat-intel feed.
+- `agents/l1.py` — L1 triage: deterministic-first enrichment + scoring producing an evidence-cited
+  verdict (verdict-class + routing + confidence + rationale), **bias to escalate on uncertainty, never
+  auto-close**; optional bounded LLM path (structured, schema-validated) when a provider is set, with
+  deterministic fallback.
+- `agents/orchestrator.py` — `TriageOrchestrator` + triage graph (intake → l1 → route) on the kernel;
+  persists the Case, records every node in the ledger, accounts per-case cost.
+- `core/cases.py` — `CaseRepo` (persist/load Case models).
+- `api/routes.py` — `POST /api/ingest`, `GET /api/cases`, `GET /api/cases/{id}`,
+  `GET /api/cases/{id}/ledger` (replay + verify); app wires store/gateway/bus/ledger/orchestrator.
+- `api/static/index.html` — minimal dark "analyst console" UI (triage box, case list, verdict card,
+  evidence, verified ledger trail; sample alerts). Served at `/`.
+- `bk triage <file|->` CLI.
+
+**Verified (empirically, offline, no key):**
+- `uv run pytest` → **45 passed** (14 new: normalize, L1 scoring, orchestrator + API e2e).
+- Live HTTP: malicious alert → `malicious/escalate/0.80`, state=escalated, 3 evidence; benign →
+  `false_positive/auto_close`, state=resolved; `GET /api/cases` lists both; ledger **verified: true**
+  with path `intake→l1→route→done`; `/` serves the UI.
+- `bk triage -` (stdin) prints the verdict. ruff + format + mypy (38 files) clean.
+
+**Exit check (S2):** a posted alert yields a tenant-scoped Case with an L1 verdict + cited evidence,
+visible in a minimal UI, recorded in a verifiable ledger — on a fresh machine with no API key. ✅
