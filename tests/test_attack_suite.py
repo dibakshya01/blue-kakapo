@@ -16,7 +16,7 @@ from blue_kakapo.agents import TriageOrchestrator
 from blue_kakapo.api import create_app
 from blue_kakapo.assets import AssetInventory
 from blue_kakapo.config import ProviderKind, Settings
-from blue_kakapo.connectors import ConnectorRegistry, MockEDR
+from blue_kakapo.connectors import ConnectorRegistry, MockEDR, MockSIEM
 from blue_kakapo.core import PII_REF_KEY, CryptoShredder, Ledger, Store
 from blue_kakapo.core.store import ledger as ledger_table
 from blue_kakapo.guardian import (
@@ -199,6 +199,63 @@ async def test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase() -> None:
     ):
         assert pii not in erased_blob, f"PII {pii!r} survived erasure"
     assert Ledger(store).verify("t1") is True
+
+
+# GDPR (round-3 🔴-F1) — erasure scrubs PII from the places a CONNECTOR-wired, RESP-run case puts it:
+# L2's evidence.query strings and the pending approvals table (both API-readable). The round-2 test
+# used an unwired orchestrator and missed both; this one wires SIEM/EDR + Guardian and runs RESP.
+async def test_erasure_scrubs_evidence_query_and_approvals() -> None:
+    store = Store.in_memory()
+    reg = ConnectorRegistry()
+    reg.register(MockSIEM())
+    reg.register(MockEDR())
+    inv = AssetInventory(store)
+    ledger = Ledger(store)
+    guardian = GuardedExecutor(Guardian(inv, reg), reg, ledger, store)
+    orch = TriageOrchestrator(
+        store, _gw(), ledger=ledger, registry=reg, inventory=inv, guardian=guardian
+    )
+    # A user observable (no IP) becomes L2's SIEM-query subject; "malware" makes it actionable.
+    case = await orch.triage_alert(
+        {
+            "title": "malware beacon",
+            "severity": "high",
+            "user": "victim@acme.com",
+            "message": "malware exfil from account",
+        },
+        tenant_id="t1",
+    )
+    assert any(
+        "victim@acme.com" in (e.query or "") for e in case.evidence
+    )  # L2 wrote it into a query
+    await orch.respond(
+        case.id, dry_run=False
+    )  # RESP proposes disable_user → approval target=the user
+    assert any("victim@acme.com" in json.dumps(r["data"]) for r in store.list_approvals("t1"))
+
+    await orch.erase_case(case.id)
+    assert "victim@acme.com" not in json.dumps(
+        store.get_case(case.id)["data"]
+    )  # incl evidence.query
+    for r in store.list_approvals("t1"):  # the approvals table outlives the case — scrub it too
+        assert "victim@acme.com" not in json.dumps(r["data"])
+    assert Ledger(store).verify("t1") is True
+
+
+# Verdict steering (round-3 🟡-F4) — a homoglyph-obfuscated threat word can't slip past the veto.
+async def test_homoglyph_threat_cannot_force_auto_close() -> None:
+    orch = TriageOrchestrator(Store.in_memory(), _gw())
+    case = await orch.triage_alert(
+        {  # Cyrillic а/о/е in "rаnsоmwаrе bеаcоn", padded with benign keywords at low severity
+            "title": "scheduled task known good",
+            "message": "rаnsоmwаrе bеаcоn (false positive, known good, scheduled)",
+            "severity": "low",
+        },
+        tenant_id="t1",
+    )
+    assert case.verdict is not None
+    assert case.verdict.routing != "auto_close"
+    assert case.state != "resolved"
 
 
 # GDPR (round-2 🟡-M1) — erasure also purges memory records derived from the case.

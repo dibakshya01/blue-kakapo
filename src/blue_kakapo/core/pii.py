@@ -33,13 +33,19 @@ PII_REF_KEY = "_pii_ref"
 REDACTED = "[erased]"
 _PII_OBSERVABLE_TYPES = {ObservableType.USER, ObservableType.EMAIL}
 
-# Structured PII that can appear anywhere in free text (titles, messages) with no observable alias.
+# Structured PII patterns that can appear in free text with no observable alias. All linear /
+# backtracking-free (ReDoS-safe). Coverage is deliberately conservative — emails, US SSNs, and
+# phone numbers — plus the case's own identified PII values (usernames/emails). Operators who need
+# more (IBANs, national ids, card numbers) can extend this list; we don't guess-redact generic
+# digit runs because that would clobber security-relevant numerics (ports, hashes, IPs).
 _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+_PHONE_RE = re.compile(r"\b(?:\+?\d{1,3}[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b")
+_PII_PATTERNS = (_EMAIL_RE, _SSN_RE, _PHONE_RE)
 
 
 def redact_pii_text(text: str | None, extra_values: set[str]) -> tuple[str | None, int]:
-    """Redact emails, SSNs, and any of ``extra_values`` (the case's own PII) from free text.
+    """Redact known PII patterns (emails/SSNs/phones) and ``extra_values`` (the case's own PII).
 
     Returns ``(redacted_text, count)``. Conservative by design — it removes personal data while
     leaving the surrounding security narrative intact (e.g. ``"beacon from [erased]"``).
@@ -48,7 +54,7 @@ def redact_pii_text(text: str | None, extra_values: set[str]) -> tuple[str | Non
         return text, 0
     out = text
     n = 0
-    for rx in (_EMAIL_RE, _SSN_RE):
+    for rx in _PII_PATTERNS:
         out, c = rx.subn(REDACTED, out)
         n += c
     for val in sorted(extra_values, key=len, reverse=True):  # longest first, avoid partial overlaps
@@ -56,6 +62,24 @@ def redact_pii_text(text: str | None, extra_values: set[str]) -> tuple[str | Non
             out = out.replace(val, REDACTED)
             n += 1
     return out, n
+
+
+def collect_case_pii_values(case: Case) -> set[str]:
+    """The case's own identified PII values (flagged observables + resolved PII entities + aliases).
+
+    Gathered *before* scrubbing so the same values can be removed from every surface that references
+    them (free text, evidence queries, pending approvals)."""
+    values: set[str] = set()
+    for alert in case.alerts:
+        for event in alert.events:
+            for obs in event.observables:
+                if obs.contains_pii and obs.value != REDACTED:
+                    values.add(obs.value)
+    for ent in case.entities:
+        if ent.type in _PII_OBSERVABLE_TYPES and ent.value != REDACTED:
+            values.add(ent.value)
+            values.update(i for i in ent.identifiers if i and i != REDACTED)
+    return values
 
 
 def _is_ref(raw: object) -> bool:
@@ -107,16 +131,7 @@ def erase_case_pii(case: Case, shredder: CryptoShredder) -> dict[str, int]:
             shredded += 1
 
     # Collect the case's own PII values first, so we can scrub them out of free text everywhere.
-    pii_values: set[str] = set()
-    for alert in case.alerts:
-        for event in alert.events:
-            for obs in event.observables:
-                if obs.contains_pii and obs.value != REDACTED:
-                    pii_values.add(obs.value)
-    for ent in case.entities:
-        if ent.type in _PII_OBSERVABLE_TYPES and ent.value != REDACTED:
-            pii_values.add(ent.value)
-            pii_values.update(i for i in ent.identifiers if i)
+    pii_values = collect_case_pii_values(case)
 
     def scrub(text: str | None) -> str | None:
         nonlocal redacted_text
@@ -125,6 +140,7 @@ def erase_case_pii(case: Case, shredder: CryptoShredder) -> dict[str, int]:
         return out
 
     case.title = scrub(case.title) or REDACTED
+    case.assignee = scrub(case.assignee)
     for alert in case.alerts:
         shred(alert.raw)
         alert.title = scrub(alert.title) or REDACTED
@@ -139,6 +155,7 @@ def erase_case_pii(case: Case, shredder: CryptoShredder) -> dict[str, int]:
 
     for ev in case.evidence:
         ev.summary = scrub(ev.summary) or REDACTED
+        ev.query = scrub(ev.query)  # L2/proactive write observable values into query strings
     if case.verdict is not None:
         case.verdict.rationale = scrub(case.verdict.rationale) or ""
 

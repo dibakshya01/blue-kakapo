@@ -164,9 +164,12 @@ def _owned_approval(request: Request, approval_id: str, principal: Principal) ->
 async def list_approvals(
     request: Request,
     status: str | None = "pending",
-    principal: Principal = _req_view,
+    principal: Principal = _req_approve,
 ) -> list[dict[str, Any]]:
-    """Pending maker-checker approvals for the tenant (the dashboard's approvals inbox)."""
+    """Pending maker-checker approvals for the tenant (the dashboard's approvals inbox).
+
+    Gated to ``approve_response`` (not plain ``view``) — the rows carry the action target, which can
+    itself be PII (e.g. a ``disable_user`` on an email), so only approvers see the inbox."""
     rows = request.app.state.store.list_approvals(principal.tenant_id, status=status)
     return [r["data"] for r in rows]
 

@@ -465,3 +465,41 @@ collided → false duplicate-approver rejection); ingest body size cap (413); er
 `?confirm=true`; README test count; documented responder-role separation + multi-process approval
 row-locking (guardian.md + a code comment). Dead-code `reveal`/replay left as the erasure-verification
 mechanism (not overclaimed).
+
+### Round 3 ✅ (2026-10-03) — fresh memory-free adversarial reviewer
+
+Reviewer re-stressed rounds 1–2 (maker-checker races, OIDC confused-deputy, SSRF, deep-nesting DoS,
+idempotent/chain-safe crypto-shred) and confirmed they **hold**. But it found the round-2 C1 erasure
+was *still* incomplete on connector-wired, RESP-run cases — and that my round-2 C1 test under-tested
+(no registry/guardian → L2 skipped; no `respond` → no approval), so it never touched the leaking
+fields. All fixed with a properly-wired regression test. **152 tests**, ruff/format/mypy clean.
+
+**🔴 F1 — PII survived erasure in two API-readable places (ship-blocker, fixed):**
+- `Evidence.query` (L2/proactive write `user=<email> last 24h`) was not scrubbed — only `ev.summary`
+  was. Fixed: `erase_case_pii` now scrubs `ev.query` too.
+- The **approvals table** was never touched by erase — `disable_user`'s `action.target` (a username/
+  email) persisted and was readable via `GET /api/approvals`. Fixed: `erase_case` now redacts
+  `action.target`/`args`/reason of the case's approval rows (`_redact_case_approvals`), using the
+  case's own PII values gathered *before* scrubbing (`collect_case_pii_values`).
+- New honest regression `test_erasure_scrubs_evidence_query_and_approvals` wires MockSIEM/EDR +
+  Guardian and runs RESP, asserting no PII in `GET /api/cases/{id}` (incl. evidence.query) or in the
+  approvals table after erase; the original under-testing test is kept for the title/message vector.
+
+**🟡 F3 — redact coverage vs. "every field" overclaim (fixed):** added a ReDoS-safe phone pattern and
+**reworded the docs + orchestrator docstring** to the honest, precise claim — erasure removes *known
+PII patterns (emails/SSNs/phones) plus the case's own identified PII values*, not "all personal data"
+by magic. Documented that operators can extend patterns; we don't guess-redact generic digit runs
+(would clobber ports/hashes/IPs).
+
+**🟡 F4 — strong-threat veto evaded by homoglyphs (fixed):** added `fold_confusables` (NFKC +
+Cyrillic/Greek→Latin map + zero-width strip) applied before the keyword and injection scanners, and
+**tightened offline auto_close to require a positive benign *indicator*** (allowlist hit), not a
+benign *keyword* — so keyword-stuffing (obfuscated or not) can't force a close. Test:
+`test_homoglyph_threat_cannot_force_auto_close`. (All bundled benign eval rows carry a real benign
+indicator, so FNR/precision are unaffected.)
+
+**⚪ Minors (fixed):** `/api/approvals` gated to `approve_response` (targets can be PII); a real
+Content-Length body-size middleware (not just the post-parse 413 cap); on approve the stored action is
+**re-evaluated through the Guardian** and refused if it now DENYs (tamper/policy-drift defense);
+`case.assignee` scrubbed on erase; erase is idempotent (no duplicate `case.erased` ledger entry);
+documented one-credential-per-approver (two local tokens = two ids).

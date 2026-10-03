@@ -26,9 +26,11 @@ from ..core import (
     Ledger,
     RunContext,
     Store,
+    collect_case_pii_values,
     erase_case_pii,
     new_run_id,
     protect_case_pii,
+    redact_pii_text,
 )
 from ..core.kernel import NodeResult
 from ..guardian import GuardedExecutor
@@ -321,34 +323,60 @@ class TriageOrchestrator:
         return case
 
     async def erase_case(self, case_id: str) -> dict[str, Any]:
-        """GDPR subject-erasure: crypto-shred the case's raw blobs and remove PII from every field.
+        """GDPR subject-erasure: crypto-shred the case's raw blobs and remove PII from every surface.
 
-        Scrubs the stored case (raw blobs, free-text, observables, entities) **and** deletes any
-        memory records derived from it. The append-only ledger is untouched (it holds no PII) and
-        still verifies afterwards. A ``case.erased`` entry is appended so the erasure is auditable.
+        Scrubs the stored case (raw blobs, free-text, evidence queries, observables, entities),
+        redacts PII from the case's **pending approvals** (``action.target``/``args``/reason), and
+        deletes any memory records derived from it. The append-only ledger is untouched (it holds no
+        PII) and still verifies afterwards. A ``case.erased`` entry is appended once so the erasure is
+        auditable; re-erasing is idempotent (no duplicate entry).
         """
         case = self.repo.get(case_id)
         if case is None:
             raise ValueError(f"unknown case {case_id!r}")
+        already_erased = case.erased_at is not None
+        pii_values = collect_case_pii_values(case)
         report = erase_case_pii(case, self.shredder)
         case.erased_at = utcnow()
         self.repo.save(case)
+        approvals_redacted = self._redact_case_approvals(case.tenant_id, case.id, pii_values)
         memory_deleted = 0
         if self.memory is not None:
             memory_deleted = await self.memory.forget_case(case.tenant_id, case.id)
-        self.ledger.append(
-            tenant_id=case.tenant_id,
-            action="case.erased",
-            actor="system",
-            actor_id="dpo",
-            case_id=case.id,
-        )
+        if not already_erased:
+            self.ledger.append(
+                tenant_id=case.tenant_id,
+                action="case.erased",
+                actor="system",
+                actor_id="dpo",
+                case_id=case.id,
+            )
         return {
             "case_id": case.id,
             "erased_at": case.erased_at.isoformat(),
             "memory_records_deleted": memory_deleted,
+            "approvals_redacted": approvals_redacted,
             **report,
         }
+
+    def _redact_case_approvals(self, tenant_id: str, case_id: str, pii_values: set[str]) -> int:
+        """Redact PII from a case's approval rows (target/args/reason) — they outlive the case."""
+        redacted = 0
+        for row in self.store.list_approvals(tenant_id, status=None):
+            data = row.get("data") or {}
+            if data.get("case_id") != case_id:
+                continue
+            action = data.get("action") or {}
+            action["target"], _ = redact_pii_text(action.get("target"), pii_values)
+            args = action.get("args") or {}
+            for key, val in list(args.items()):
+                if isinstance(val, str):
+                    args[key], _ = redact_pii_text(val, pii_values)
+            data["action"] = action
+            data["reason"], _ = redact_pii_text(data.get("reason"), pii_values)
+            self.store.update_approval(row["id"], {"data": data})
+            redacted += 1
+        return redacted
 
     @staticmethod
     async def _noop_emit(action: str, **kw: Any) -> None:

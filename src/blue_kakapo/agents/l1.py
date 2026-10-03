@@ -14,7 +14,12 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ..attack import tactics_for
-from ..guardian.injection import as_untrusted, contains_unsafe_output, scan_injection
+from ..guardian.injection import (
+    as_untrusted,
+    contains_unsafe_output,
+    fold_confusables,
+    scan_injection,
+)
 from ..intel_builtin import check_indicator
 from ..providers import ChatMessage, ProviderError, ProviderGateway
 from ..providers.pricing import estimate_usd
@@ -83,7 +88,8 @@ def _text_blob(case: Case) -> str:
             parts.append(alert.rule_name)
         for event in alert.events:
             parts.append(event.message)
-    return " ".join(parts).lower()
+    # Fold homoglyphs/zero-width before keyword matching so obfuscated threat words still register.
+    return fold_confusables(" ".join(parts)).lower()
 
 
 def _untrusted_text(case: Case) -> str:
@@ -190,7 +196,9 @@ def deterministic_triage(case: Case) -> tuple[Verdict, list[Evidence]]:
     elif susp_kw and not benign_kw:
         vclass, routing, conf = VerdictClass.SUSPICIOUS, RoutingDisposition.ESCALATE, 0.6
         rationale = "Suspicious keywords present with no benign signals."
-    elif (benign > 0 or benign_kw) and sev_rank <= SEVERITY_RANK[Severity.LOW]:
+    elif benign > 0 and sev_rank <= SEVERITY_RANK[Severity.LOW]:
+        # Require a positive benign *indicator* (allowlist hit) to auto-close — not merely a benign
+        # keyword, which an attacker can stuff into threat text to force a close (round-2 M4 / round-3).
         conf = 0.8
         vclass = VerdictClass.FALSE_POSITIVE
         routing = (
@@ -198,7 +206,7 @@ def deterministic_triage(case: Case) -> tuple[Verdict, list[Evidence]]:
             if conf >= _AUTO_CLOSE_THRESHOLD
             else RoutingDisposition.ESCALATE
         )
-        rationale = "Benign signals with low severity."
+        rationale = "Benign indicator match with low severity."
     elif sev_rank >= SEVERITY_RANK[Severity.HIGH]:
         vclass, routing, conf = VerdictClass.SUSPICIOUS, RoutingDisposition.ESCALATE, 0.55
         rationale = "High severity without a benign explanation."

@@ -10,6 +10,50 @@ access, and (3) be able to change external state. Break at least one leg.
 from __future__ import annotations
 
 import re
+import unicodedata
+
+# Common Latin-lookalikes (Cyrillic/Greek) + zero-width chars, so a homoglyph-obfuscated keyword
+# ("rаnsоmware" with Cyrillic а/о) can't slip past the keyword/injection scanners. Not exhaustive —
+# defense-in-depth, honestly: a determined attacker can still use rarer confusables or synonyms.
+_CONFUSABLES = str.maketrans(
+    {
+        "а": "a",
+        "е": "e",
+        "о": "o",
+        "с": "c",
+        "р": "p",
+        "х": "x",
+        "у": "y",
+        "ѕ": "s",
+        "і": "i",
+        "ј": "j",
+        "ԁ": "d",
+        "һ": "h",
+        "ԛ": "q",
+        "ԝ": "w",
+        "ɡ": "g",
+        "ⅼ": "l",
+        "α": "a",
+        "ο": "o",
+        "ρ": "p",
+        "ε": "e",
+        "ν": "v",
+        "τ": "t",
+        "ι": "i",
+        "κ": "k",
+        "​": "",
+        "‌": "",
+        "‍": "",
+        "﻿": "",
+        " ": " ",
+    }
+)
+
+
+def fold_confusables(text: str) -> str:
+    """NFKC-normalize, map common Latin-lookalikes to ASCII, and drop zero-width chars."""
+    return unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)
+
 
 _INJECTION_PATTERNS = [
     r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions",
@@ -36,16 +80,17 @@ _UNSAFE_OUTPUT_RE = [
 
 
 def scan_injection(text: str) -> list[str]:
-    """Return the injection patterns that matched (empty = clean)."""
+    """Return the injection patterns that matched (empty = clean). Confusable-folded first."""
+    folded = fold_confusables(text)
     return [
         p.pattern
         for p, raw in zip(_INJECTION_RE, _INJECTION_PATTERNS, strict=True)
-        if p.search(text)
+        if p.search(folded)
     ]
 
 
 def contains_injection(text: str) -> bool:
-    return any(p.search(text) for p in _INJECTION_RE)
+    return any(p.search(fold_confusables(text)) for p in _INJECTION_RE)
 
 
 def contains_unsafe_output(text: str) -> bool:

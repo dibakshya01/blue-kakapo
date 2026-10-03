@@ -98,6 +98,9 @@ class Settings(BaseSettings):
         default=False,
         description="Permit binding a non-loopback host while auth is disabled (NOT recommended).",
     )
+    max_request_bytes: int = Field(
+        default=2 * 1024 * 1024, description="Hard cap on request body size (Content-Length)."
+    )
 
     # --- auth / rbac (enterprise) ---
     auth_enabled: bool = (

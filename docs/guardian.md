@@ -33,6 +33,12 @@ tool/alert content as data.
 - The shipped `responder` role holds both `propose_response` and `approve_response`. Two-person
   control still holds for high-impact actions (two **distinct** principals required), but for a
   multi-analyst SOC, split proposing and approving across roles.
+- Distinctness is per principal id. A **human should hold one credential**: two local static tokens
+  map to two ids, so one person could satisfy both approvals. OIDC subjects are stable and don't have
+  this issue — prefer OIDC for approvers, or issue one token per person.
+- On approval the stored action is **re-evaluated** through the Guardian before it runs, so a policy
+  change (or tampering that turns it into a denied action) blocks execution. The approvals inbox is
+  gated to `approve_response`, since an action target can itself be PII.
 - Approval counting is correct for the single-process deployment (status is persisted before the
   connector call; actions carry an idempotency key). A multi-replica/Postgres deployment should add
   row-level locking (`SELECT … FOR UPDATE`) before counting an approval.

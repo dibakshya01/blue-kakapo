@@ -21,7 +21,13 @@ from .kernel import (
     run_parallel,
 )
 from .ledger import GENESIS_HASH, Ledger, compute_hash
-from .pii import PII_REF_KEY, erase_case_pii, protect_case_pii
+from .pii import (
+    PII_REF_KEY,
+    collect_case_pii_values,
+    erase_case_pii,
+    protect_case_pii,
+    redact_pii_text,
+)
 from .store import Store
 
 __all__ = [
@@ -34,6 +40,8 @@ __all__ = [
     "PII_REF_KEY",
     "protect_case_pii",
     "erase_case_pii",
+    "collect_case_pii_values",
+    "redact_pii_text",
     "EventBus",
     "Event",
     "Engine",

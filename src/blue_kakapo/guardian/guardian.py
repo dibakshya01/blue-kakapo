@@ -235,6 +235,23 @@ class GuardedExecutor:
         self.store.update_approval(
             approval_id, {"status": "approved", "data": appr.model_dump(mode="json")}
         )
+        # Re-evaluate the stored action through the Guardian before executing. If a tamper (or a
+        # since-changed policy/inventory) now makes it DENY, refuse — approval authorizes the action
+        # the humans saw, not a later substitution. (Does not weaken the gate: a high-impact action
+        # still re-asks, but it has already cleared the two-person check.)
+        recheck = self.guardian.check(appr.action, case_id=appr.case_id)
+        if recheck.decision == ACSDisposition.DENY:
+            appr.status = "denied"
+            self.store.update_approval(
+                approval_id, {"status": "denied", "data": appr.model_dump(mode="json")}
+            )
+            self._ledger(
+                f"approval.revoked:{appr.action.verb}",
+                tenant_id=appr.tenant_id,
+                case_id=appr.case_id,
+                disposition=recheck.decision,
+            )
+            return ExecutionResult(status="denied", disposition=recheck, detail=recheck.reason)
         allow = Disposition(decision=ACSDisposition.ALLOW, reason="approved by human(s)")
         return await self._run_action(appr.action, allow, case_id=appr.case_id, dry_run=dry_run)
 

@@ -111,6 +111,19 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     app.state.user_store = user_store
     app.state.secrets = build_secret_store(settings)
 
+    # Hard body-size bound (defense-in-depth over per-route caps): reject oversized requests by
+    # Content-Length before the body is buffered/parsed.
+    max_body = settings.max_request_bytes
+
+    @app.middleware("http")
+    async def _limit_body_size(request, call_next):  # type: ignore[no-untyped-def]
+        cl = request.headers.get("content-length")
+        if cl is not None and cl.isdigit() and int(cl) > max_body:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=413, content={"detail": "request body too large"})
+        return await call_next(request)
+
     app.include_router(router)
     app.include_router(scim_router)
 
