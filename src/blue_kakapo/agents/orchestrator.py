@@ -1,9 +1,9 @@
-"""The triage orchestrator (walking-skeleton superagent).
+"""The triage orchestrator / superagent.
 
-Builds the deterministic triage graph — intake → L1 → route — and drives a raw alert through it on
-the kernel, persisting the Case and recording every step in the ledger. The full 14-agent
-orchestration (investigation, correlation, intel, response, approvals) grows onto this loop in later
-stages; the shape here is the one that stays.
+Drives a case through the deterministic graph on the kernel — intake → L1 → (investigate: INTEL + L2 +
+FUSION) → route — running each stage as an SDK agent whose output is merged into the case and recorded
+in the ledger. Triage is read-only; RESP containment is a separate, explicitly-invoked, Guardian-gated
+path (``respond``), never auto-run. More agents (S9) attach to this same shape.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..assets import AssetInventory, resolve_entities
+from ..connectors import ConnectorRegistry
 from ..core import (
     CaseRepo,
     Done,
@@ -25,86 +27,44 @@ from ..core import (
     new_run_id,
 )
 from ..core.kernel import NodeResult
+from ..guardian import GuardedExecutor
+from ..memory import MemoryService
 from ..normalize import normalize_alert
 from ..providers import ProviderGateway
-from ..schema.common import CaseState, utcnow
+from ..schema.common import CaseState, RoutingDisposition, utcnow
 from ..schema.ledger import ModelRef
-from ..schema.models import Case
-from . import l1
+from ..schema.models import Case, Evidence
+from .fusion import FusionAgent
+from .intel import IntelAgent
+from .l1 import L1Agent
+from .l2 import L2Agent
+from .resp import RespAgent
+from .sdk import Agent, AgentOutput, AgentServices
 
 
 class TriageState(BaseModel):
     case: Case
 
 
-async def _intake(ctx: RunContext[TriageState]) -> NodeResult:
-    case = ctx.state.case
-    case.state = CaseState.TRIAGING
-    case.updated_at = utcnow()
-    # Opt-in memory recall: surface similar prior cases as cited context (never as instructions).
-    memory = ctx.services.get("memory")
-    if memory is not None and case.memory_enabled:
-        from ..schema.models import Evidence
-
-        recalled = await memory.recall_for_case(case, k=3)
-        for sr in recalled:
-            case.add_evidence(
-                Evidence(
-                    tenant_id=case.tenant_id,
-                    source="memory",
-                    summary=f"Similar prior case ({sr.score:.2f}): {sr.record.case_summary[:160]}",
-                    supports="prior_case",
-                )
-            )
-        if recalled:
-            await ctx.emit("memory.recalled", actor="agent", actor_id="orchestrator")
-    return Goto("l1")
-
-
-async def _l1(ctx: RunContext[TriageState]) -> NodeResult:
-    gateway: ProviderGateway = ctx.services["gateway"]
-    case = ctx.state.case
-    verdict, evidence, model_ref = await l1.triage(case, gateway)
-    for ev in evidence:
+def _merge(case: Case, out: AgentOutput) -> None:
+    """Merge an agent's output into the case (evidence, verdict, techniques, entities, cost)."""
+    for ev in out.evidence:
         case.add_evidence(ev)
-    case.verdict = verdict
-    case.attack_techniques = verdict.attack_techniques
-    if model_ref is not None:
-        case.cost.add(model_ref.tokens_in, model_ref.tokens_out, model_ref.usd)
-    await ctx.emit(
-        f"l1.verdict:{verdict.verdict_class}:{verdict.routing}",
-        actor="agent",
-        actor_id="L1",
-        model=model_ref or ModelRef(id=verdict.model_id or "offline-deterministic"),
-    )
-    return Goto("route")
-
-
-async def _route(ctx: RunContext[TriageState]) -> NodeResult:
-    case = ctx.state.case
-    routing = case.verdict.routing if case.verdict else "escalate"
-    if routing == "auto_close":
-        case.state = CaseState.RESOLVED
-    elif routing == "await_approval":
-        case.state = CaseState.AWAITING_APPROVAL
-    else:
-        case.state = CaseState.ESCALATED
+    if out.verdict is not None:
+        case.verdict = out.verdict
+    for t in out.techniques:
+        if t not in case.attack_techniques:
+            case.attack_techniques.append(t)
+    for ent in out.entities:
+        if not any(e.type == ent.type and e.value == ent.value for e in case.entities):
+            case.entities.append(ent)
+    if out.cost is not None:
+        case.cost.add(out.cost.tokens_in, out.cost.tokens_out, out.cost.usd)
     case.updated_at = utcnow()
-    await ctx.emit(f"route:{case.state}", actor="agent", actor_id="orchestrator")
-    return Done()
-
-
-def build_triage_graph() -> Graph:
-    return (
-        Graph("triage")
-        .add("intake", _intake, entry=True)
-        .add("l1", _l1, timeout=180.0, retries=1)
-        .add("route", _route)
-    )
 
 
 class TriageOrchestrator:
-    """Wires store/ledger/bus/engine/gateway and runs the triage graph for a new alert."""
+    """Wires store/ledger/bus/engine/gateway/connectors/guardian/memory and runs the triage graph."""
 
     def __init__(
         self,
@@ -113,7 +73,10 @@ class TriageOrchestrator:
         *,
         bus: EventBus | None = None,
         ledger: Ledger | None = None,
-        memory: object | None = None,
+        memory: MemoryService | None = None,
+        registry: ConnectorRegistry | None = None,
+        inventory: AssetInventory | None = None,
+        guardian: GuardedExecutor | None = None,
     ) -> None:
         self.store = store
         self.gateway = gateway
@@ -121,8 +84,108 @@ class TriageOrchestrator:
         self.ledger = ledger or Ledger(store)
         self.engine = Engine(store, self.ledger, self.bus)
         self.repo = CaseRepo(store)
-        self.memory = memory  # optional MemoryService
-        self.graph = build_triage_graph()
+        self.memory = memory
+        self.registry = registry
+        self.inventory = inventory
+        self.guardian = guardian
+        self.l1 = L1Agent()
+        self.intel = IntelAgent()
+        self.l2 = L2Agent()
+        self.fusion = FusionAgent()
+        self.resp = RespAgent()
+        self.graph = self._build_graph()
+
+    def _services(self, ctx: RunContext[TriageState], **options: Any) -> AgentServices:
+        async def emit(action: str, **kw: Any) -> None:
+            await ctx.emit(action, **kw)
+
+        return AgentServices(
+            tenant_id=ctx.tenant_id,
+            gateway=self.gateway,
+            emit=emit,
+            registry=self.registry,
+            inventory=self.inventory,
+            guardian=self.guardian,
+            memory=self.memory,
+            repo=self.repo,
+            options=options,
+        )
+
+    async def _run_agent(
+        self, agent: Agent, ctx: RunContext[TriageState], **options: Any
+    ) -> AgentOutput:
+        out = await agent.run(ctx.state.case, self._services(ctx, **options))
+        _merge(ctx.state.case, out)
+        await ctx.emit(f"agent:{agent.name}", actor="agent", actor_id=agent.name)
+        return out
+
+    # --- graph nodes ---
+
+    async def _intake(self, ctx: RunContext[TriageState]) -> NodeResult:
+        case = ctx.state.case
+        case.state = CaseState.TRIAGING
+        if self.inventory is not None:
+            for ent in resolve_entities(case, self.inventory):
+                case.entities.append(ent)
+        if self.memory is not None and case.memory_enabled:
+            recalled = await self.memory.recall_for_case(case, k=3)
+            for sr in recalled:
+                case.add_evidence(
+                    Evidence(
+                        tenant_id=case.tenant_id,
+                        source="memory",
+                        summary=f"Similar prior case ({sr.score:.2f}): {sr.record.case_summary[:160]}",
+                        supports="prior_case",
+                    )
+                )
+            if recalled:
+                await ctx.emit("memory.recalled", actor="agent", actor_id="orchestrator")
+        return Goto("l1")
+
+    async def _l1(self, ctx: RunContext[TriageState]) -> NodeResult:
+        out = await self._run_agent(self.l1, ctx)
+        model = out.cost or ModelRef(
+            id=(out.verdict.model_id if out.verdict else "offline-deterministic")
+        )
+        v = ctx.state.case.verdict
+        await ctx.emit(
+            f"l1.verdict:{v.verdict_class if v else '?'}:{v.routing if v else '?'}",
+            actor="agent",
+            actor_id="L1",
+            model=model,
+        )
+        if v and v.routing == RoutingDisposition.AUTO_CLOSE:
+            return Goto("route")
+        return Goto("investigate")
+
+    async def _investigate(self, ctx: RunContext[TriageState]) -> NodeResult:
+        ctx.state.case.state = CaseState.INVESTIGATING
+        await self._run_agent(self.intel, ctx)
+        await self._run_agent(self.l2, ctx)
+        await self._run_agent(self.fusion, ctx)
+        return Goto("route")
+
+    async def _route(self, ctx: RunContext[TriageState]) -> NodeResult:
+        case = ctx.state.case
+        routing = case.verdict.routing if case.verdict else RoutingDisposition.ESCALATE
+        if routing == RoutingDisposition.AUTO_CLOSE:
+            case.state = CaseState.RESOLVED
+        elif routing == RoutingDisposition.AWAIT_APPROVAL:
+            case.state = CaseState.AWAITING_APPROVAL
+        else:
+            case.state = CaseState.ESCALATED
+        case.updated_at = utcnow()
+        await ctx.emit(f"route:{case.state}", actor="agent", actor_id="orchestrator")
+        return Done()
+
+    def _build_graph(self) -> Graph:
+        return (
+            Graph("triage")
+            .add("intake", self._intake, entry=True)
+            .add("l1", self._l1, timeout=180.0, retries=1)
+            .add("investigate", self._investigate, timeout=240.0, retries=1)
+            .add("route", self._route)
+        )
 
     async def triage_alert(
         self,
@@ -141,7 +204,6 @@ class TriageOrchestrator:
             memory_enabled=memory_enabled,
         )
         self.repo.save(case)
-
         ctx: RunContext[TriageState] = RunContext(
             run_id=new_run_id(),
             tenant_id=tenant_id,
@@ -150,14 +212,48 @@ class TriageOrchestrator:
             store=self.store,
             bus=self.bus,
             case_id=case.id,
-            services={"gateway": self.gateway, "memory": self.memory},
         )
         outcome = await self.engine.run(self.graph, ctx)
         final_case = outcome.state.case
         self.repo.save(final_case)
-
-        # Learn from the resolved case (opt-in). Stored quarantined until a human promotes it.
         if self.memory is not None and final_case.memory_enabled:
-            await self.memory.remember(final_case)  # type: ignore[attr-defined]
-
+            await self.memory.remember(final_case)
         return final_case
+
+    async def respond(
+        self, case_id: str, *, dry_run: bool = True, actor_roles: list[str] | None = None
+    ) -> Case:
+        """Run RESP on an existing case — Guardian-gated, explicit, never part of auto-triage."""
+        case = self.repo.get(case_id)
+        if case is None:
+            raise ValueError(f"unknown case {case_id!r}")
+        case.state = CaseState.RESPONDING
+        services = AgentServices(
+            tenant_id=case.tenant_id,
+            gateway=self.gateway,
+            emit=self._noop_emit,
+            registry=self.registry,
+            inventory=self.inventory,
+            guardian=self.guardian,
+            memory=self.memory,
+            repo=self.repo,
+            options={"dry_run": dry_run, "actor_roles": actor_roles or []},
+        )
+        out = await self.resp.run(case, services)
+        _merge(case, out)
+        results: list[dict[str, Any]] = out.metadata.get("results", [])
+        pending = any(r.get("status") == "pending_approval" for r in results)
+        case.state = CaseState.AWAITING_APPROVAL if pending else CaseState.RESOLVED
+        self.ledger.append(
+            tenant_id=case.tenant_id,
+            action=f"respond:{case.state}",
+            actor="agent",
+            actor_id="RESP",
+            case_id=case.id,
+        )
+        self.repo.save(case)
+        return case
+
+    @staticmethod
+    async def _noop_emit(action: str, **kw: Any) -> None:
+        return None

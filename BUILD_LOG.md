@@ -187,3 +187,37 @@ orchestrator remembers then recalls a promoted case end-to-end; API status + ing
 **Exit check (S5):** resolve case → stored; similar alert retrieves it (once promoted); opt-in honored;
 agent-authored memory quarantined; embedding-version mismatch triggers migration; poisoning-guard
 tests pass. ✅
+
+---
+
+## S6 — Core-5 depth + eval harness ✅ (2026-10-03)
+
+**Shipped:** the deep triage wedge on a frozen Agent SDK, plus the honest eval harness.
+- `agents/sdk.py` — **Agent SDK**: `AgentServices`, `AgentOutput`, `Agent` base that **structurally
+  enforces the Rule of Two** (construction fails if an agent has all three legs).
+- `attack.py` — ATT&CK technique→tactic map + kill-chain weighting (v19 Stealth/Defense-Impairment
+  split noted).
+- Core-5 agents (each: typed I/O, AgBOM, deterministic-first, evidence-cited, autonomy-enforced):
+  **L1** (verdict), **L2** (connector enrich + SIEM query via escape hatch), **INTEL** (IOC intel +
+  ATT&CK tactics), **FUSION** (entity-overlap correlation across open cases), **RESP** (containment,
+  only via the GuardedExecutor; breaks the untrusted-input leg).
+- Orchestrator rebuilt: intake (entity resolution + memory recall) → L1 → *(auto_close → route | else
+  investigate: INTEL+L2+FUSION)* → route; plus `respond(case, dry_run)` — explicit, Guardian-gated,
+  never auto-run.
+- **Eval harness** (`eval/harness.py` + bundled 18-record dataset + methodology README): threat
+  precision/recall/F1, **false-negative rate** (+ named misses), verdict accuracy, calibration
+  (Brier + ECE), cost-per-case; offline numbers labeled an **illustrative floor**. `bk eval` CLI +
+  `GET /api/eval`. API: `/api/cases/{id}/respond`, `/api/agents` (roster + AgBOM). App wires default
+  reference connectors + Guardian so the full flow runs out of the box.
+
+**Verified:** `uv run pytest` → **105 passed** (10 new). Highlights: **Rule-of-Two enforced at
+construction** (reckless 3-leg agent rejected; core-5 all valid); L2 enrich+query; INTEL known-bad +
+tactics; FUSION correlates shared entities; **RESP crown-jewel isolate → pending (never auto-isolated)**;
+full orchestrator flow escalates with intel/l2/fusion evidence + verifiable ledger; gated dry-run
+respond. Live: `bk eval` → precision 1.0 / recall 0.9 / **FNR 0.10** (names the stealthy miss) /
+labeled floor; `/api/agents`, `/api/eval`, `/api/cases/{id}/respond` all work. ruff + format + mypy
+(61 files) clean.
+
+**Exit check (S6):** end-to-end alert→triage→investigate→correlate→context→verdict (evidence +
+confidence); RESP containment gated + reversible (dry-run + mock EDR); harness reports precision/
+recall/**FNR**/cost on the documented bundled dataset (labeled illustrative). ✅

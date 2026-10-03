@@ -14,8 +14,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from .. import __version__
 from ..agents import TriageOrchestrator
+from ..assets import AssetInventory
 from ..config import Settings, get_settings
+from ..connectors import ConnectorRegistry, MockEDR, MockSIEM
 from ..core import CaseRepo, EventBus, Ledger, Store
+from ..guardian import GuardedExecutor, Guardian
 from ..logging import configure_logging, get_logger, maybe_setup_otel
 from ..memory import MemoryService, build_memory_backend
 from ..providers import ProviderGateway
@@ -50,7 +53,33 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     ledger = Ledger(store)
     repo = CaseRepo(store)
     memory = MemoryService(build_memory_backend(settings, store), gateway)
-    orchestrator = TriageOrchestrator(store, gateway, bus=bus, ledger=ledger, memory=memory)
+
+    # Default reference connectors so the full agent flow works out of the box (swap for real ones).
+    registry = ConnectorRegistry()
+    registry.register(MockSIEM())
+    registry.register(MockEDR())
+    inventory = AssetInventory(store)
+    guardian = GuardedExecutor(
+        Guardian(
+            inventory,
+            registry,
+            max_concurrent_actions=settings.max_concurrent_actions,
+            containment_ttl_seconds=settings.containment_default_ttl_seconds,
+        ),
+        registry,
+        ledger,
+        store,
+    )
+    orchestrator = TriageOrchestrator(
+        store,
+        gateway,
+        bus=bus,
+        ledger=ledger,
+        memory=memory,
+        registry=registry,
+        inventory=inventory,
+        guardian=guardian,
+    )
 
     app.state.settings = settings
     app.state.store = store
@@ -59,6 +88,9 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     app.state.ledger = ledger
     app.state.repo = repo
     app.state.memory = memory
+    app.state.registry = registry
+    app.state.inventory = inventory
+    app.state.guardian = guardian
     app.state.orchestrator = orchestrator
 
     app.include_router(router)

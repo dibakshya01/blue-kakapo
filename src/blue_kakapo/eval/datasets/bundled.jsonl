@@ -1,0 +1,18 @@
+{"id": "m1", "label": "malicious", "alert": {"title": "Outbound C2 beacon", "severity": "high", "dst_ip": "198.51.100.23", "domain": "malware.example", "attack_techniques": ["T1071"]}}
+{"id": "m2", "label": "malicious", "alert": {"title": "Known-bad hash executed", "severity": "high", "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "attack_techniques": ["T1204"]}}
+{"id": "m3", "label": "malicious", "alert": {"title": "Connection to C2 domain", "severity": "medium", "domain": "c2.example"}}
+{"id": "s1", "label": "suspicious", "alert": {"title": "Possible ransomware activity", "severity": "high", "host": "WS-12", "attack_techniques": ["T1486"]}}
+{"id": "s2", "label": "suspicious", "alert": {"title": "Encoded PowerShell exploit attempt", "severity": "medium", "host": "WS-44", "user": "jdoe"}}
+{"id": "s3", "label": "suspicious", "alert": {"title": "Credential access beacon detected", "severity": "medium", "user": "svc-sql"}}
+{"id": "b1", "label": "benign", "alert": {"title": "Scheduled backup login (test)", "severity": "low", "src_ip": "10.0.0.9", "domain": "internal.example"}}
+{"id": "b2", "label": "benign", "alert": {"title": "Known good update check", "severity": "informational", "domain": "updates.example"}}
+{"id": "b3", "label": "benign", "alert": {"title": "Routine training drill login", "severity": "low", "src_ip": "192.168.1.20"}}
+{"id": "b4", "label": "benign", "alert": {"title": "Internal health check", "severity": "low", "src_ip": "172.16.5.5", "domain": "internal.example"}}
+{"id": "i1", "label": "inconclusive", "alert": {"title": "Unusual process spawn", "severity": "medium", "host": "WS-7"}}
+{"id": "i2", "label": "inconclusive", "alert": {"title": "New service account created", "severity": "medium", "user": "svc-new"}}
+{"id": "fn1", "label": "malicious", "alert": {"title": "Low-and-slow exfil disguised as backup", "severity": "low", "domain": "internal.example", "src_ip": "10.0.0.50"}}
+{"id": "fn2", "label": "suspicious", "alert": {"title": "Quiet lateral movement test window", "severity": "low", "src_ip": "10.0.0.51"}}
+{"id": "tp1", "label": "malicious", "alert": {"title": "Data exfiltration to known-bad host", "severity": "critical", "dst_ip": "203.0.113.66", "attack_techniques": ["T1041"]}}
+{"id": "b5", "label": "benign", "alert": {"title": "Scheduled backup job authenticated", "severity": "low", "user": "backup-svc", "domain": "internal.example"}}
+{"id": "s4", "label": "suspicious", "alert": {"title": "Malware signature matched on endpoint", "severity": "high", "host": "WS-90"}}
+{"id": "i3", "label": "inconclusive", "alert": {"title": "Firewall config changed off-hours", "severity": "medium", "host": "fw-1"}}

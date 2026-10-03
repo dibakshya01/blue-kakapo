@@ -55,6 +55,8 @@ cd blue-kakapo
 uv sync                 # install
 uv run bk info          # show resolved config (offline by default — no key needed)
 uv run bk serve         # start the control-plane API on http://127.0.0.1:8713
+uv run bk triage -      # triage one alert from stdin (JSON)
+uv run bk eval          # run the eval harness — reports the false-negative rate, honestly
 ```
 
 Open `http://127.0.0.1:8713/healthz` — you're running, in **offline mode**, with no credentials and

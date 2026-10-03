@@ -1,1 +1,7 @@
-"""blue-kakapo eval — implemented in a later stage (see build-plan.md §5)."""
+"""blue-kakapo evaluation harness — measures triage quality honestly (incl. the false-negative rate)."""
+
+from __future__ import annotations
+
+from .harness import EvalReport, load_dataset, run_eval
+
+__all__ = ["EvalReport", "run_eval", "load_dataset"]

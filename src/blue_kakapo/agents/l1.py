@@ -13,17 +13,20 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from ..attack import tactics_for
 from ..intel_builtin import check_indicator
 from ..providers import ChatMessage, ProviderError, ProviderGateway
 from ..providers.pricing import estimate_usd
 from ..schema.common import (
     SEVERITY_RANK,
+    AutonomyLevel,
     RoutingDisposition,
     Severity,
     VerdictClass,
 )
 from ..schema.ledger import ModelRef
-from ..schema.models import Case, Evidence, Verdict
+from ..schema.models import AgBOM, Case, Evidence, Verdict
+from .sdk import Agent, AgentOutput, AgentServices
 
 _SUSPICIOUS_KW = (
     "malware",
@@ -232,3 +235,35 @@ async def triage(
         model_id=resp.model_id,
     )
     return merged, evidence, model_ref
+
+
+class L1Agent(Agent):
+    """L1 — Triage & intake. Reads untrusted alert data; proposes a verdict, never acts."""
+
+    name = "L1"
+    autonomy_level = AutonomyLevel.PROPOSE
+    handles_untrusted_input = True
+    holds_sensitive_access = False
+    changes_external_state = False
+
+    def agbom(self) -> AgBOM:
+        return AgBOM(
+            agent=self.name,
+            autonomy_level=self.autonomy_level,
+            tools=["builtin-intel", "severity-heuristics"],
+            models=["provider-gateway"],
+            data_scopes=["alert:read"],
+            permissions=[],
+        )
+
+    async def run(self, case: Case, svc: AgentServices) -> AgentOutput:
+        verdict, evidence, model_ref = await triage(case, svc.gateway)
+        techniques = verdict.attack_techniques
+        return AgentOutput(
+            evidence=evidence,
+            verdict=verdict,
+            techniques=techniques,
+            cost=model_ref,
+            metadata={"tactics": tactics_for(techniques)},
+            notes=verdict.rationale,
+        )

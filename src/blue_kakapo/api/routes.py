@@ -46,6 +46,52 @@ async def ingest(req: IngestRequest, request: Request) -> IngestResponse:
     return IngestResponse(case=case)
 
 
+class RespondRequest(BaseModel):
+    dry_run: bool = Field(
+        default=True, description="Dry-run by default; real actions are Guardian-gated."
+    )
+    actor_roles: list[str] = Field(default_factory=list)
+
+
+@router.post("/cases/{case_id}/respond", response_model=Case)
+async def respond(case_id: str, req: RespondRequest, request: Request) -> Case:
+    """Run RESP on a case — Guardian-gated containment, explicit (never part of auto-triage)."""
+    orch = _orchestrator(request)
+    try:
+        return await orch.respond(case_id, dry_run=req.dry_run, actor_roles=req.actor_roles)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/agents")
+async def list_agents(request: Request) -> list[dict[str, Any]]:
+    """The core-5 agent roster with their AgBOMs (what each can touch)."""
+    orch = _orchestrator(request)
+    agents = [orch.l1, orch.intel, orch.l2, orch.fusion, orch.resp]
+    return [
+        {
+            "name": a.name,
+            "autonomy_level": a.autonomy_level,
+            "agbom": a.agbom().model_dump(),
+            "rule_of_two": {
+                "untrusted_input": a.handles_untrusted_input,
+                "sensitive_access": a.holds_sensitive_access,
+                "external_state_change": a.changes_external_state,
+            },
+        }
+        for a in agents
+    ]
+
+
+@router.get("/eval")
+async def run_evaluation(request: Request) -> dict[str, Any]:
+    """Run the evaluation harness on the bundled dataset (reports the false-negative rate)."""
+    from ..eval import run_eval
+
+    report = await run_eval(gateway=request.app.state.gateway)
+    return report.to_dict()
+
+
 @router.get("/memory/status")
 async def memory_status(request: Request, tenant_id: str | None = None) -> dict[str, Any]:
     memory = request.app.state.memory

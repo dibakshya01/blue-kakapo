@@ -94,6 +94,19 @@ def _cmd_triage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_eval(args: argparse.Namespace) -> int:
+    from .eval import run_eval
+    from .providers import ProviderGateway
+
+    s = get_settings()
+    report = asyncio.run(run_eval(dataset=args.dataset, gateway=ProviderGateway(s)))
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(report.render())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="blue-kakapo", description="Open-source agentic SOC.")
     parser.add_argument("--version", action="version", version=f"blue-kakapo {__version__}")
@@ -113,6 +126,15 @@ def build_parser() -> argparse.ArgumentParser:
     triage.add_argument("--tenant", default=None)
     triage.add_argument("--source", default="cli")
     triage.set_defaults(func=_cmd_triage)
+
+    ev = sub.add_parser(
+        "eval", help="Run the evaluation harness (reports the false-negative rate)."
+    )
+    ev.add_argument(
+        "--dataset", default=None, help="Path to a labeled JSONL dataset (default: bundled)."
+    )
+    ev.add_argument("--json", action="store_true", help="Emit the report as JSON.")
+    ev.set_defaults(func=_cmd_eval)
 
     return parser
 
