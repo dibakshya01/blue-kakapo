@@ -1,0 +1,86 @@
+# Default values for blue-kakapo.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/dibakshya01/blue-kakapo
+  tag: "" # defaults to .Chart.appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Non-root, read-only-rootfs hardened pod (a security tool should practice what it preaches).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 8713
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: blue-kakapo.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# blue-kakapo configuration (maps to BK_ env). Enterprise deploys enable auth.
+config:
+  deploymentName: blue-kakapo
+  storageBackend: postgres
+  provider: offline # offline | anthropic | openai | ollama
+  model: offline-deterministic
+  logJson: true
+  authEnabled: true
+  oidcIssuer: ""
+  oidcJwksUrl: ""
+  oidcAudience: "blue-kakapo"
+  memoryBackend: pgvector
+  secretBackend: openbao # env | file | openbao
+  openbaoAddr: ""
+  openbaoMount: secret
+
+# Database connection. Point at your Postgres (pgvector). Password should come from a secret.
+database:
+  url: "postgresql+psycopg://kakapo@postgres:5432/kakapo"
+
+# Secrets are injected from an existing Secret (recommended: External Secrets Operator / OpenBao).
+# Keys expected: database-password, anthropic-api-key, openai-api-key, openbao-token (as needed).
+existingSecret: ""
+
+extraEnv: []
+nodeSelector: {}
+tolerations: []
+affinity: {}

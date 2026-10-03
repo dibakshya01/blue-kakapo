@@ -1,0 +1,26 @@
+# Zarf package for air-gapped Kubernetes deployment of blue-kakapo.
+#
+#   zarf package create deploy/zarf          # on a connected machine
+#   zarf package deploy zarf-package-*.tar.zst   # inside the air gap
+#
+# Bundles the signed image, the Helm chart, and Postgres (pgvector) so a disconnected cluster can run
+# blue-kakapo with no outbound network. Point the chart at your own IdP/secret store at deploy time.
+kind: ZarfPackageConfig
+metadata:
+  name: blue-kakapo
+  version: 0.0.1
+  description: "Agentic SOC — air-gapped install (image + chart + pgvector)."
+
+components:
+  - name: blue-kakapo
+    required: true
+    images:
+      - ghcr.io/dibakshya01/blue-kakapo:0.0.1
+      - pgvector/pgvector:pg16
+    charts:
+      - name: blue-kakapo
+        localPath: ../helm/blue-kakapo
+        namespace: blue-kakapo
+        version: 0.0.1
+        valuesFiles:
+          - values.air-gapped.yaml

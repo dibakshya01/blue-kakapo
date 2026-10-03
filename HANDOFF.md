@@ -15,8 +15,16 @@ for *you*.
 
 2. **Enable GitHub Actions** (if not on by default) so CI runs on push/PR.
 
-3. *(Later)* Enable GitHub Pages for the project site, configure branch protection, and — only if you
-   choose to — publish a package/release. These will be fleshed out as we reach those stages.
+3. **Container image / release.** The `Release` workflow (`.github/workflows/release.yml`) builds,
+   SBOMs, **cosign-signs (keyless)**, and pushes the image to **GHCR** on a `v*` tag. To cut a release:
+   ```bash
+   git tag v0.0.1 && git push origin v0.0.1
+   ```
+   You may need to allow GitHub Actions to publish packages (repo → Settings → Actions → Workflow
+   permissions) and make the GHCR package public.
+
+4. *(Later)* Enable GitHub Pages for the project site; configure branch protection/rulesets on `main`.
+   These are set up as we reach the site/launch stages.
 
 ## Notes
 

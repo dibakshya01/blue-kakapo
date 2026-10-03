@@ -87,6 +87,27 @@ class Settings(BaseSettings):
     api_port: int = 8713  # "BK13" on a phone keypad; avoids common defaults
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
+    # --- auth / rbac (enterprise) ---
+    auth_enabled: bool = (
+        False  # localhost default: open (implicit local-admin). Enable for deploys.
+    )
+    api_tokens: list[str] = Field(
+        default_factory=list,
+        description="Static tokens as 'token:tenant:role1|role2' (for services/CI).",
+    )
+    oidc_issuer: str | None = None
+    oidc_jwks_url: str | None = None
+    oidc_audience: str | None = None
+    oidc_tenant_claim: str = "tenant"
+    oidc_roles_claim: str = "roles"
+
+    # --- secrets ---
+    secret_backend: str = "env"  # env | file | openbao
+    secret_file: Path | None = None
+    openbao_addr: str | None = None
+    openbao_token: str | None = None
+    openbao_mount: str = "secret"
+
     # --- observability ---
     log_level: str = "INFO"
     log_json: bool = False  # human logs for dev; JSON for prod

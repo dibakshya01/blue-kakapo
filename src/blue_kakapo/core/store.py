@@ -131,6 +131,18 @@ approvals = Table(
     Column("data", JSON, nullable=False),
 )
 
+users = Table(
+    "users",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False, index=True),
+    Column("username", String, nullable=False, index=True),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("external_id", String, nullable=True, index=True),
+    Column("data", JSON, nullable=False),
+    UniqueConstraint("tenant_id", "username", name="uq_user_tenant_username"),
+)
+
 memory = Table(
     "memory",
     metadata,
@@ -437,3 +449,44 @@ class Store:
         q = q.limit(limit)
         with self.engine.begin() as conn:
             return [dict(r) for r in conn.execute(q).mappings().all()]
+
+    # --- users (SCIM provisioning) ---
+
+    def upsert_user(self, values: dict[str, Any]) -> None:
+        with self.engine.begin() as conn:
+            exists = conn.execute(select(users.c.id).where(users.c.id == values["id"])).first()
+            if exists:
+                conn.execute(update(users).where(users.c.id == values["id"]).values(**values))
+            else:
+                conn.execute(insert(users).values(**values))
+
+    def get_user(self, user_id: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = conn.execute(select(users).where(users.c.id == user_id)).mappings().first()
+            return dict(row) if row else None
+
+    def get_user_by_username(self, tenant_id: str, username: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = (
+                conn.execute(
+                    select(users).where(
+                        users.c.tenant_id == tenant_id, users.c.username == username
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return dict(row) if row else None
+
+    def list_users(self, tenant_id: str, limit: int = 500) -> list[dict[str, Any]]:
+        with self.engine.begin() as conn:
+            rows = (
+                conn.execute(select(users).where(users.c.tenant_id == tenant_id).limit(limit))
+                .mappings()
+                .all()
+            )
+            return [dict(r) for r in rows]
+
+    def delete_user(self, user_id: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(delete(users).where(users.c.id == user_id))

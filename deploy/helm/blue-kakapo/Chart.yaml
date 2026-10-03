@@ -1,0 +1,17 @@
+apiVersion: v2
+name: blue-kakapo
+description: Open-source agentic SOC — a transparent coworker for L2/L3 analysts.
+type: application
+version: 0.0.1
+appVersion: "0.0.1"
+home: https://github.com/dibakshya01/blue-kakapo
+sources:
+  - https://github.com/dibakshya01/blue-kakapo
+keywords:
+  - soc
+  - security
+  - agentic
+  - triage
+  - self-hosted
+maintainers:
+  - name: blue-kakapo contributors

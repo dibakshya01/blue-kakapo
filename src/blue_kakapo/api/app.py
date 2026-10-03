@@ -22,7 +22,10 @@ from ..guardian import GuardedExecutor, Guardian
 from ..logging import configure_logging, get_logger, maybe_setup_otel
 from ..memory import MemoryService, build_memory_backend
 from ..providers import ProviderGateway
+from ..security import Authenticator, build_secret_store
+from ..security.scim import UserStore
 from .routes import router
+from .scim import scim_router
 
 _STATIC_DIR = Path(__file__).parent / "static"  # fallback minimal UI
 _DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "web" / "dist"  # built React dashboard
@@ -93,8 +96,15 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     app.state.inventory = inventory
     app.state.guardian = guardian
     app.state.orchestrator = orchestrator
+    authenticator = Authenticator(settings)
+    user_store = UserStore(store)
+    authenticator.set_user_store(user_store)
+    app.state.authenticator = authenticator
+    app.state.user_store = user_store
+    app.state.secrets = build_secret_store(settings)
 
     app.include_router(router)
+    app.include_router(scim_router)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict:

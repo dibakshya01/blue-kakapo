@@ -1,0 +1,20 @@
+blue-kakapo {{ .Chart.AppVersion }} is deploying.
+
+1. Check rollout:
+   kubectl rollout status deploy/{{ include "blue-kakapo.fullname" . }}
+
+2. Port-forward the API/dashboard:
+   kubectl port-forward svc/{{ include "blue-kakapo.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+   open http://127.0.0.1:{{ .Values.service.port }}
+
+{{- if .Values.config.authEnabled }}
+
+Auth is ENABLED. Configure OIDC (oidcIssuer/oidcJwksUrl) and provision users via SCIM, or set
+BK_API_TOKENS for service tokens. No anonymous access.
+{{- else }}
+
+WARNING: auth is DISABLED (open mode). Do not expose this deployment publicly.
+{{- end }}
+
+Point `database.url` at your Postgres (pgvector) and supply secrets via `existingSecret`
+(recommended: External Secrets Operator backed by OpenBao/Vault).

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "blue-kakapo.fullname" . }}
+  labels: {{- include "blue-kakapo.labels" . | nindent 4 }}
+data:
+  BK_DEPLOYMENT_NAME: {{ .Values.config.deploymentName | quote }}
+  BK_API_HOST: "0.0.0.0"
+  BK_API_PORT: {{ .Values.service.port | quote }}
+  BK_STORAGE_BACKEND: {{ .Values.config.storageBackend | quote }}
+  BK_PROVIDER: {{ .Values.config.provider | quote }}
+  BK_MODEL: {{ .Values.config.model | quote }}
+  BK_LOG_JSON: {{ .Values.config.logJson | quote }}
+  BK_AUTH_ENABLED: {{ .Values.config.authEnabled | quote }}
+  BK_OIDC_ISSUER: {{ .Values.config.oidcIssuer | quote }}
+  BK_OIDC_JWKS_URL: {{ .Values.config.oidcJwksUrl | quote }}
+  BK_OIDC_AUDIENCE: {{ .Values.config.oidcAudience | quote }}
+  BK_MEMORY_BACKEND: {{ .Values.config.memoryBackend | quote }}
+  BK_SECRET_BACKEND: {{ .Values.config.secretBackend | quote }}
+  BK_OPENBAO_ADDR: {{ .Values.config.openbaoAddr | quote }}
+  BK_OPENBAO_MOUNT: {{ .Values.config.openbaoMount | quote }}

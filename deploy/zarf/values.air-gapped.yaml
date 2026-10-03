@@ -1,0 +1,11 @@
+# Helm overrides for air-gapped installs. Use a LOCAL model (no cloud provider reachable) and point
+# at the in-cluster Postgres + your in-network OpenBao/IdP.
+config:
+  provider: ollama # or offline; never a cloud provider in an air gap
+  model: qwen3:8b
+  memoryBackend: pgvector
+  secretBackend: openbao
+  authEnabled: true
+database:
+  url: "postgresql+psycopg://kakapo@blue-kakapo-postgres:5432/kakapo"
+existingSecret: blue-kakapo-secrets

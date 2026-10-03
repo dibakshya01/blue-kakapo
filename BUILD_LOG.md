@@ -248,3 +248,34 @@ browser check:** dashboard renders; malicious case shows verdict + 10 cross-agen
 updates; approvals/respond actionable; provider switch from UI; dark theme. ✅
 
 **This completes Arc 1 (first public release: S0–S7 + core-5 + honest eval).**
+
+---
+
+## S8 — Enterprise hardening ✅ (2026-10-03)
+
+**Shipped (Arc 2 — enterprise GA):**
+- `security/` package: **Principal + RBAC** (viewer/analyst/responder/admin → permissions);
+  **Authenticator** (open localhost / static service tokens / **OIDC JWT via JWKS**, PyJWT RS256);
+  **SecretStore** (env / encrypted-file / **OpenBao** KV); **SCIM 2.0** user provisioning with a
+  **deprovision→deny cascade** wired into auth; FastAPI deps (`require(permission)`).
+- API hardening: every data route is **tenant-scoped to the principal** and **RBAC-gated** (VIEW /
+  TRIAGE / PROPOSE_RESPONSE / MANAGE / ADMIN); cross-tenant access returns 404 (no existence leak);
+  WebSocket authenticates via `?token=`. SCIM endpoints under `/scim/v2` (admin-only). Store gains a
+  `users` table.
+- Deploy: hardened **Helm chart** (non-root, read-only rootfs, dropped caps, no SA token, probes,
+  config/secret wiring, ingress/HPA options) + README; **Release CI** (build → SBOM via syft →
+  **cosign keyless sign + SBOM attestation** → GHCR); **Zarf** air-gap package (image + chart +
+  pgvector) with air-gapped values.
+
+**Verified:** `uv run pytest` → **118 passed** (9 new). Highlights: role→permission mapping; open-mode
+local admin; local-token auth (missing/invalid → 401); **OIDC RS256 verify maps tenant+roles**;
+**SCIM deprovision → subsequent auth denied**; env secret store; **API 401 without token, 403 without
+permission (viewer can't triage, analyst can't respond)**; **tenant isolation (B can't see A's case →
+404)**; SCIM admin-only. ruff + mypy (69 files) clean.
+
+**Exit check (S8):** SSO (OIDC) works; SCIM deprovision cascades; low-priv role denied containment;
+tenant isolation holds; Helm chart written (hardened); images signed + SBOM in CI; Zarf air-gap
+package defined. ✅  *(SAML via an OIDC-bridging proxy — Keycloak/oauth2-proxy — is the documented
+pattern; native SAML is roadmap.)*
+
+**This completes Arc 2 (enterprise GA).**
