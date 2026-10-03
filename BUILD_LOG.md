@@ -99,3 +99,34 @@ minimal UI, offline-capable.
 
 **Exit check (S2):** a posted alert yields a tenant-scoped Case with an L1 verdict + cited evidence,
 visible in a minimal UI, recorded in a verifiable ledger — on a fresh machine with no API key. ✅
+
+---
+
+## S3 — Connectors + ingestion depth ✅ (2026-10-03)
+
+**Shipped:** the "connect your systems" layer.
+- `connectors/base.py` — capability-declaring **Connector SDK**: `Capability` (read_alerts/query/
+  enrich/act), `ActionSpec` (verb + **reversibility** + reverse_verb + required_scope), `ConnectorInfo`,
+  `ActionResult`/`QueryResult`/`HealthStatus`, `Connector` protocol + `BaseConnector`.
+- `connectors/registry.py` — register/lookup by capability; `find_action(verb)`.
+- `connectors/mock.py` — **MockSIEM** (read/query/enrich, deterministic samples) + **MockEDR** (act:
+  isolate/disable/block/kill with correct reversibility, dry-run, idempotency, in-memory state).
+- `connectors/ingest.py` — **FileIngestConnector** (.json/.jsonl/dir) + `parse_syslog_line`
+  (RFC 5424 & 3164 + key=value extraction + freeform fallback).
+- `connectors/wazuh.py` — read from the Wazuh indexer (OpenSearch) → OCSF; active-response act; JWT auth.
+- `connectors/elastic.py` — read `.alerts-security.alerts-*` (ECS) → OCSF; endpoint isolate/unisolate.
+- `connectors/mcp.py` — **MCP client with tool-manifest fingerprint pinning** (rug-pull defense),
+  argument validation, descriptions-as-data; transport injected (testable).
+
+**Sources now available (≥3):** webhook (`POST /api/ingest`), mock SIEM, file/JSONL, syslog parse,
+plus real Wazuh/Elastic read paths.
+
+**Verified:** `uv run pytest` → **66 passed** (21 new). Highlights: mock EDR reversibility/dry-run/
+idempotency; registry capability + action lookup; file + JSONL + directory ingest; syslog 5424/3164;
+**MCP: pin → call ok; rug-pull (changed tool description) → MCPRugPullError, poisoned tool never
+invoked; schema validation rejects missing/typed args; repin re-approves**; Wazuh + Elastic OCSF
+mapping (unit) and read_alerts over respx-mocked HTTP; capability/reversibility declarations. ruff +
+format + mypy (45 files) clean.
+
+**Exit check (S3):** alerts flow from ≥3 sources → OCSF → Alerts; connector contract tests pass; MCP
+tool consumed safely with manifest pinning. ✅
