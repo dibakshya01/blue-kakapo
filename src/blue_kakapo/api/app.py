@@ -17,6 +17,7 @@ from ..agents import TriageOrchestrator
 from ..config import Settings, get_settings
 from ..core import CaseRepo, EventBus, Ledger, Store
 from ..logging import configure_logging, get_logger, maybe_setup_otel
+from ..memory import MemoryService, build_memory_backend
 from ..providers import ProviderGateway
 from .routes import router
 
@@ -48,7 +49,8 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     bus = EventBus()
     ledger = Ledger(store)
     repo = CaseRepo(store)
-    orchestrator = TriageOrchestrator(store, gateway, bus=bus, ledger=ledger)
+    memory = MemoryService(build_memory_backend(settings, store), gateway)
+    orchestrator = TriageOrchestrator(store, gateway, bus=bus, ledger=ledger, memory=memory)
 
     app.state.settings = settings
     app.state.store = store
@@ -56,6 +58,7 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None) 
     app.state.bus = bus
     app.state.ledger = ledger
     app.state.repo = repo
+    app.state.memory = memory
     app.state.orchestrator = orchestrator
 
     app.include_router(router)

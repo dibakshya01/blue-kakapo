@@ -159,3 +159,31 @@ detected in alert content; unsafe output caught; Rule-of-Two. ruff + format + my
 
 **Exit check (S4):** Guardian asks/denies/modifies high-impact in tests; injection suite passes; no
 action reaches a connector without a disposition + ledger entry; never-isolate-crown-jewel honored. ✅
+
+---
+
+## S5 — Memory subsystem ✅ (2026-10-03)
+
+**Shipped:** opt-in case memory with poisoning defenses.
+- `memory/base.py` — backend protocol + shared scoring (cosine, lexical overlap, metadata filters).
+- `memory/folder.py` — **FolderMemoryBackend** (embedded JSONL in the UI-linked folder; atomic writes).
+- `memory/sql.py` — **SqlMemoryBackend** (DB-backed; Postgres in prod / SQLite in dev; `memory` table;
+  pgvector/HNSW ANN is a Postgres deploy optimization, retrieval contract unchanged).
+- `memory/service.py` — **MemoryService**: `remember` (compact case → embed → store, **quarantined**
+  by default), `recall` (opt-in; dense + lexical blend × **trust-tier weight** × **decay**, excludes
+  quarantined/stale), `promote` (human review → reviewed/authoritative), `reembed` (detects embedding-
+  model change and migrates — mixing models' vectors is excluded until migrated).
+- Wiring: orchestrator recalls similar prior cases at intake (as cited `prior_case` evidence, never
+  instructions) and remembers resolved cases — both opt-in per case. API: `GET /api/memory/status`,
+  `POST /api/memory/link` (local folder), and `memory_enabled` on `/api/ingest`. Store `memory` table
+  + helpers.
+
+**Verified:** `uv run pytest` → **95 passed** (8 new). Highlights: folder + SQL roundtrip (tenant-
+scoped); **quarantine blocks recall until a human promotes**; opt-out honored; hybrid ranking prefers
+the relevant case; **embedding-model change → stale excluded → reembed migrates → recall works**;
+orchestrator remembers then recalls a promoted case end-to-end; API status + ingest opt-in flag. ruff
++ format + mypy (54 files) clean.
+
+**Exit check (S5):** resolve case → stored; similar alert retrieves it (once promoted); opt-in honored;
+agent-authored memory quarantined; embedding-version mismatch triggers migration; poisoning-guard
+tests pass. ✅

@@ -20,10 +20,15 @@ class IngestRequest(BaseModel):
         default=None, description="Defaults to the deployment's default tenant."
     )
     source: str = Field(default="webhook")
+    memory_enabled: bool = Field(default=False, description="Opt-in: consult + write case memory.")
 
 
 class IngestResponse(BaseModel):
     case: Case
+
+
+class MemoryLinkRequest(BaseModel):
+    folder: str = Field(..., description="Local system folder to create/link for case memory.")
 
 
 def _orchestrator(request: Request) -> TriageOrchestrator:
@@ -35,8 +40,32 @@ async def ingest(req: IngestRequest, request: Request) -> IngestResponse:
     """Accept a raw alert, triage it end-to-end, and return the resulting Case (with verdict)."""
     orch = _orchestrator(request)
     tenant = req.tenant_id or request.app.state.settings.default_tenant
-    case = await orch.triage_alert(req.alert, tenant_id=tenant, source=req.source)
+    case = await orch.triage_alert(
+        req.alert, tenant_id=tenant, source=req.source, memory_enabled=req.memory_enabled
+    )
     return IngestResponse(case=case)
+
+
+@router.get("/memory/status")
+async def memory_status(request: Request, tenant_id: str | None = None) -> dict[str, Any]:
+    memory = request.app.state.memory
+    tenant = tenant_id or request.app.state.settings.default_tenant
+    return {
+        "backend": memory.backend.name,
+        "embedding_model": memory.gateway.embedding_model_id(),
+        "count": await memory.backend.count(tenant),
+        "opt_in_default": request.app.state.settings.memory_enabled_default,
+    }
+
+
+@router.post("/memory/link")
+async def memory_link(req: MemoryLinkRequest, request: Request) -> dict[str, Any]:
+    """Create/link a local folder for case memory and switch the active backend to it (local mode)."""
+    from ..memory import FolderMemoryBackend
+
+    backend = FolderMemoryBackend(req.folder)
+    request.app.state.memory.backend = backend
+    return {"backend": backend.name, "folder": str(backend.folder), "linked": True}
 
 
 @router.get("/cases", response_model=list[Case])

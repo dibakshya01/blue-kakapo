@@ -131,6 +131,19 @@ approvals = Table(
     Column("data", JSON, nullable=False),
 )
 
+memory = Table(
+    "memory",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False, index=True),
+    Column("trust_tier", String, nullable=False, index=True),
+    Column("technique", String, nullable=True, index=True),
+    Column("severity", String, nullable=True),
+    Column("outcome", String, nullable=True),
+    Column("embedding", JSON, nullable=False),
+    Column("data", JSON, nullable=False),
+)
+
 
 def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.UTC)
@@ -396,5 +409,31 @@ class Store:
         if status:
             q = q.where(approvals.c.status == status)
         q = q.order_by(approvals.c.created_at.desc()).limit(limit)
+        with self.engine.begin() as conn:
+            return [dict(r) for r in conn.execute(q).mappings().all()]
+
+    # --- memory ---
+
+    def upsert_memory(self, values: dict[str, Any]) -> None:
+        with self.engine.begin() as conn:
+            exists = conn.execute(select(memory.c.id).where(memory.c.id == values["id"])).first()
+            if exists:
+                conn.execute(update(memory).where(memory.c.id == values["id"]).values(**values))
+            else:
+                conn.execute(insert(memory).values(**values))
+
+    def get_memory(self, record_id: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = conn.execute(select(memory).where(memory.c.id == record_id)).mappings().first()
+            return dict(row) if row else None
+
+    def query_memory(
+        self, tenant_id: str, filters: dict[str, str] | None = None, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        q = select(memory).where(memory.c.tenant_id == tenant_id)
+        for key in ("technique", "severity", "outcome", "trust_tier"):
+            if filters and key in filters:
+                q = q.where(getattr(memory.c, key) == filters[key])
+        q = q.limit(limit)
         with self.engine.begin() as conn:
             return [dict(r) for r in conn.execute(q).mappings().all()]

@@ -38,8 +38,26 @@ class TriageState(BaseModel):
 
 
 async def _intake(ctx: RunContext[TriageState]) -> NodeResult:
-    ctx.state.case.state = CaseState.TRIAGING
-    ctx.state.case.updated_at = utcnow()
+    case = ctx.state.case
+    case.state = CaseState.TRIAGING
+    case.updated_at = utcnow()
+    # Opt-in memory recall: surface similar prior cases as cited context (never as instructions).
+    memory = ctx.services.get("memory")
+    if memory is not None and case.memory_enabled:
+        from ..schema.models import Evidence
+
+        recalled = await memory.recall_for_case(case, k=3)
+        for sr in recalled:
+            case.add_evidence(
+                Evidence(
+                    tenant_id=case.tenant_id,
+                    source="memory",
+                    summary=f"Similar prior case ({sr.score:.2f}): {sr.record.case_summary[:160]}",
+                    supports="prior_case",
+                )
+            )
+        if recalled:
+            await ctx.emit("memory.recalled", actor="agent", actor_id="orchestrator")
     return Goto("l1")
 
 
@@ -95,6 +113,7 @@ class TriageOrchestrator:
         *,
         bus: EventBus | None = None,
         ledger: Ledger | None = None,
+        memory: object | None = None,
     ) -> None:
         self.store = store
         self.gateway = gateway
@@ -102,13 +121,25 @@ class TriageOrchestrator:
         self.ledger = ledger or Ledger(store)
         self.engine = Engine(store, self.ledger, self.bus)
         self.repo = CaseRepo(store)
+        self.memory = memory  # optional MemoryService
         self.graph = build_triage_graph()
 
     async def triage_alert(
-        self, raw: dict[str, Any], *, tenant_id: str, source: str = "webhook"
+        self,
+        raw: dict[str, Any],
+        *,
+        tenant_id: str,
+        source: str = "webhook",
+        memory_enabled: bool = False,
     ) -> Case:
         alert = normalize_alert(raw, tenant_id=tenant_id, source=source)
-        case = Case(tenant_id=tenant_id, title=alert.title, severity=alert.severity, alerts=[alert])
+        case = Case(
+            tenant_id=tenant_id,
+            title=alert.title,
+            severity=alert.severity,
+            alerts=[alert],
+            memory_enabled=memory_enabled,
+        )
         self.repo.save(case)
 
         ctx: RunContext[TriageState] = RunContext(
@@ -119,9 +150,14 @@ class TriageOrchestrator:
             store=self.store,
             bus=self.bus,
             case_id=case.id,
-            services={"gateway": self.gateway},
+            services={"gateway": self.gateway, "memory": self.memory},
         )
         outcome = await self.engine.run(self.graph, ctx)
         final_case = outcome.state.case
         self.repo.save(final_case)
+
+        # Learn from the resolved case (opt-in). Stored quarantined until a human promotes it.
+        if self.memory is not None and final_case.memory_enabled:
+            await self.memory.remember(final_case)  # type: ignore[attr-defined]
+
         return final_case
