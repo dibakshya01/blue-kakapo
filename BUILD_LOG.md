@@ -130,3 +130,32 @@ format + mypy (45 files) clean.
 
 **Exit check (S3):** alerts flow from ≥3 sources → OCSF → Alerts; connector contract tests pass; MCP
 tool consumed safely with manifest pinning. ✅
+
+---
+
+## S4 — Guardian + Asset Inventory ✅ (2026-10-03)
+
+**Shipped:** the safety core — nothing state-changing reaches a connector ungated.
+- `assets/inventory.py` + store tables (`assets`, `asset_identifiers`) — `AssetInventory`
+  (upsert/lookup by identifier, tenant-scoped, conservative `normal` default).
+- `assets/resolution.py` — deterministic entity resolution (exact-identifier match → asset link +
+  confidence; unknowns left unresolved, never guessed).
+- `guardian/injection.py` — prompt-injection detection (`scan_injection`/`contains_injection`), unsafe
+  output guard (`contains_unsafe_output`), `as_untrusted` wrapper, and **Rule of Two**.
+- `guardian/policy.py` — typed policy engine (ACS): `capability_gate` (deny unsupported),
+  `crown_jewel_guard` (ask + N approvals), `blast_radius_guard`, `irreversible_guard`,
+  `containment_ttl_modify` (auto-expiry), `low_impact_allow`; precedence **deny > ask > modify >
+  allow**, default **ask** (never fail-open).
+- `guardian/guardian.py` — `Guardian.check` (action+context → Disposition) and `GuardedExecutor`
+  (the sole path to `connector.act`): records the disposition in the ledger, refuses denies, opens
+  maker-checker **approvals** (two-person rule, duplicate-approver rejected, deny path), executes
+  allow/modify using the rewritten action; `approvals` store table.
+
+**Verified:** `uv run pytest` → **87 passed** (21 new). Highlights: low-impact→allow+executed+ledgered;
+containment→modify adds TTL then executes; **crown-jewel isolate→pending (never auto-isolated); needs
+2 distinct approvers; duplicate approver rejected; denied approval blocks execution**; unsupported
+verb→deny and the connector is never touched (disposition still ledgered); irreversible→ask; injection
+detected in alert content; unsafe output caught; Rule-of-Two. ruff + format + mypy (50 files) clean.
+
+**Exit check (S4):** Guardian asks/denies/modifies high-impact in tests; injection suite passes; no
+action reaches a connector without a disposition + ledger entry; never-isolate-crown-jewel honored. ✅

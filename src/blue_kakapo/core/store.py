@@ -101,6 +101,36 @@ crypto_blobs = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
+assets = Table(
+    "assets",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False, index=True),
+    Column("name", String, nullable=False),
+    Column("criticality", String, nullable=False),
+    Column("data", JSON, nullable=False),
+)
+
+asset_identifiers = Table(
+    "asset_identifiers",
+    metadata,
+    Column("tenant_id", String, nullable=False, index=True),
+    Column("identifier", String, nullable=False, index=True),
+    Column("asset_id", String, nullable=False),
+    UniqueConstraint("tenant_id", "identifier", name="uq_asset_identifier"),
+)
+
+approvals = Table(
+    "approvals",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False, index=True),
+    Column("case_id", String, nullable=True, index=True),
+    Column("status", String, nullable=False, index=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("data", JSON, nullable=False),
+)
+
 
 def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.UTC)
@@ -287,3 +317,84 @@ class Store:
     def delete_blob(self, token: str) -> None:
         with self.engine.begin() as conn:
             conn.execute(delete(crypto_blobs).where(crypto_blobs.c.token == token))
+
+    # --- assets + identifiers ---
+
+    def upsert_asset(self, values: dict[str, Any], identifiers: list[str]) -> None:
+        with self.engine.begin() as conn:
+            exists = conn.execute(select(assets.c.id).where(assets.c.id == values["id"])).first()
+            if exists:
+                conn.execute(update(assets).where(assets.c.id == values["id"]).values(**values))
+            else:
+                conn.execute(insert(assets).values(**values))
+            conn.execute(
+                delete(asset_identifiers).where(asset_identifiers.c.asset_id == values["id"])
+            )
+            for ident in dict.fromkeys(identifiers):  # dedupe, preserve order
+                # Last-writer-wins: an identifier points to exactly one asset (portable across DBs).
+                conn.execute(
+                    delete(asset_identifiers).where(
+                        asset_identifiers.c.tenant_id == values["tenant_id"],
+                        asset_identifiers.c.identifier == ident,
+                    )
+                )
+                conn.execute(
+                    insert(asset_identifiers).values(
+                        tenant_id=values["tenant_id"], identifier=ident, asset_id=values["id"]
+                    )
+                )
+
+    def get_asset(self, asset_id: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = conn.execute(select(assets).where(assets.c.id == asset_id)).mappings().first()
+            return dict(row) if row else None
+
+    def find_asset_by_identifier(self, tenant_id: str, identifier: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(asset_identifiers.c.asset_id).where(
+                    asset_identifiers.c.tenant_id == tenant_id,
+                    asset_identifiers.c.identifier == identifier,
+                )
+            ).first()
+            if not row:
+                return None
+            asset = conn.execute(select(assets).where(assets.c.id == row[0])).mappings().first()
+            return dict(asset) if asset else None
+
+    def list_assets(self, tenant_id: str, limit: int = 500) -> list[dict[str, Any]]:
+        with self.engine.begin() as conn:
+            rows = (
+                conn.execute(select(assets).where(assets.c.tenant_id == tenant_id).limit(limit))
+                .mappings()
+                .all()
+            )
+            return [dict(r) for r in rows]
+
+    # --- approvals ---
+
+    def insert_approval(self, values: dict[str, Any]) -> None:
+        self.insert_row(approvals, values)
+
+    def get_approval(self, approval_id: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = (
+                conn.execute(select(approvals).where(approvals.c.id == approval_id))
+                .mappings()
+                .first()
+            )
+            return dict(row) if row else None
+
+    def update_approval(self, approval_id: str, values: dict[str, Any]) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(update(approvals).where(approvals.c.id == approval_id).values(**values))
+
+    def list_approvals(
+        self, tenant_id: str, status: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        q = select(approvals).where(approvals.c.tenant_id == tenant_id)
+        if status:
+            q = q.where(approvals.c.status == status)
+        q = q.order_by(approvals.c.created_at.desc()).limit(limit)
+        with self.engine.begin() as conn:
+            return [dict(r) for r in conn.execute(q).mappings().all()]
