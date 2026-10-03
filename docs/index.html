@@ -32,7 +32,8 @@
 </header>
 
 <main>
-  <section class="hero wrap">
+  <div class="aurora" aria-hidden="true"><div class="grid-lines"></div></div>
+  <section class="hero wrap hero-rise">
     <div class="kicker">Open-source · self-hosted · Apache-2.0</div>
     <h1>The agentic SOC that<br />shows its work.</h1>
     <p class="lede">A swarm of specialized agents triages your Tier-1 alerts, cites its evidence, and keeps data in your network — a transparent coworker for L2/L3 analysts, not a black box that acts alone.</p>
@@ -53,17 +54,18 @@
     </div>
   </section>
 
-  <section class="wrap">
-    <div class="glass" style="padding:20px; max-width:760px; margin:0 auto;">
+  <section class="wrap reveal" data-verdict>
+    <div class="glass" data-parallax="0.03" style="padding:20px; max-width:760px; margin:0 auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <span class="mono muted" style="font-size:.78rem;">CASE · case_01M…52PB</span>
         <span class="vbadge v-red">malicious → escalate · 90%</span>
       </div>
+      <div class="confbar" aria-hidden="true"><i data-to="90"></i></div>
       <div class="mono" style="font-size:.84rem; color:#cfd8e3; line-height:1.9;">
-        <div><span style="color:var(--accent-2)">builtin-intel</span> &nbsp;198.51.100.23 matches a known-bad indicator &nbsp;<span class="muted">[malicious]</span></div>
-        <div><span style="color:var(--accent-2)">threat-intel</span> &nbsp;malware.example associated with known-malicious activity &nbsp;<span class="muted">[malicious]</span></div>
-        <div><span style="color:var(--accent-2)">attack-map</span> &nbsp;maps to ATT&amp;CK tactic: command-and-control &nbsp;<span class="muted">[context]</span></div>
-        <div style="color:var(--accent); margin-top:8px;">ledger verified ✓ · intake → l1 → investigate → route</div>
+        <div class="vline"><span style="color:var(--accent-2)">builtin-intel</span> &nbsp;198.51.100.23 matches a known-bad indicator &nbsp;<span class="muted">[malicious]</span></div>
+        <div class="vline"><span style="color:var(--accent-2)">threat-intel</span> &nbsp;malware.example associated with known-malicious activity &nbsp;<span class="muted">[malicious]</span></div>
+        <div class="vline"><span style="color:var(--accent-2)">attack-map</span> &nbsp;maps to ATT&amp;CK tactic: command-and-control &nbsp;<span class="muted">[context]</span></div>
+        <div class="vfinal" style="margin-top:8px;"><span class="tick">✓</span> ledger verified · intake → l1 → investigate → route</div>
       </div>
     </div>
   </section>
