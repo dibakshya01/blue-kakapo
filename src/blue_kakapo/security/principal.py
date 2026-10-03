@@ -52,9 +52,10 @@ def permissions_for(roles: list[str]) -> set[Permission]:
 
 
 class Principal(BKModel):
-    id: str
+    id: str  # stable subject (OIDC `sub` / token id) — used for maker-checker + SCIM external_id
     tenant_id: str
     roles: list[str] = Field(default_factory=lambda: [Role.VIEWER.value])
+    username: str | None = None  # stable login (OIDC preferred_username / SCIM userName)
     display_name: str | None = None
     auth_method: str = "local"  # local | oidc | open
 

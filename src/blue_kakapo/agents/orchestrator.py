@@ -320,11 +320,12 @@ class TriageOrchestrator:
         self.repo.save(case)
         return case
 
-    def erase_case(self, case_id: str) -> dict[str, Any]:
-        """GDPR subject-erasure: crypto-shred the case's raw blobs and redact PII-flagged fields.
+    async def erase_case(self, case_id: str) -> dict[str, Any]:
+        """GDPR subject-erasure: crypto-shred the case's raw blobs and remove PII from every field.
 
-        The append-only ledger is untouched (it holds no PII) and still verifies afterwards. An
-        ``case.erased`` entry is appended so the erasure itself is auditable.
+        Scrubs the stored case (raw blobs, free-text, observables, entities) **and** deletes any
+        memory records derived from it. The append-only ledger is untouched (it holds no PII) and
+        still verifies afterwards. A ``case.erased`` entry is appended so the erasure is auditable.
         """
         case = self.repo.get(case_id)
         if case is None:
@@ -332,6 +333,9 @@ class TriageOrchestrator:
         report = erase_case_pii(case, self.shredder)
         case.erased_at = utcnow()
         self.repo.save(case)
+        memory_deleted = 0
+        if self.memory is not None:
+            memory_deleted = await self.memory.forget_case(case.tenant_id, case.id)
         self.ledger.append(
             tenant_id=case.tenant_id,
             action="case.erased",
@@ -339,7 +343,12 @@ class TriageOrchestrator:
             actor_id="dpo",
             case_id=case.id,
         )
-        return {"case_id": case.id, "erased_at": case.erased_at.isoformat(), **report}
+        return {
+            "case_id": case.id,
+            "erased_at": case.erased_at.isoformat(),
+            "memory_records_deleted": memory_deleted,
+            **report,
+        }
 
     @staticmethod
     async def _noop_emit(action: str, **kw: Any) -> None:

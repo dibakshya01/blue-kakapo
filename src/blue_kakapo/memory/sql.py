@@ -60,3 +60,12 @@ class SqlMemoryBackend:
 
     async def count(self, tenant_id: str) -> int:
         return len(self.store.query_memory(tenant_id))
+
+    async def delete_by_case(self, tenant_id: str, case_id: str) -> int:
+        deleted = 0
+        for r in self.store.query_memory(tenant_id):
+            rec = MemoryRecord.model_validate(r["data"])
+            if rec.case_id == case_id:
+                self.store.delete_memory(rec.id)
+                deleted += 1
+        return deleted

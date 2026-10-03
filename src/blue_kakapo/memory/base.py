@@ -64,6 +64,8 @@ class MemoryBackend(Protocol):
 
     async def count(self, tenant_id: str) -> int: ...
 
+    async def delete_by_case(self, tenant_id: str, case_id: str) -> int: ...
+
 
 def matches_filters(record: MemoryRecord, filters: dict[str, str] | None) -> bool:
     if not filters:

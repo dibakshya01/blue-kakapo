@@ -75,11 +75,16 @@ def _owned_case(request: Request, case_id: str, principal: Principal) -> Case:
     return case
 
 
+_MAX_ALERT_BYTES = 512 * 1024  # cap a single alert payload (DoS / unbounded-body guard)
+
+
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest(
     req: IngestRequest, request: Request, principal: Principal = _req_triage
 ) -> IngestResponse:
     """Accept a raw alert, triage it end-to-end, and return the resulting Case (with verdict)."""
+    if len(json.dumps(req.alert, default=str)) > _MAX_ALERT_BYTES:
+        raise HTTPException(status_code=413, detail="alert payload too large")
     case = await _orchestrator(request).triage_alert(
         req.alert,
         tenant_id=principal.tenant_id,
@@ -133,11 +138,18 @@ async def respond(
 
 @router.post("/cases/{case_id}/erase")
 async def erase_case(
-    case_id: str, request: Request, principal: Principal = _req_admin
+    case_id: str, request: Request, confirm: bool = False, principal: Principal = _req_admin
 ) -> dict[str, Any]:
-    """GDPR subject-erasure: crypto-shred the case's raw blobs + redact PII. Ledger stays verifiable."""
+    """GDPR subject-erasure: crypto-shred the case's raw blobs + redact PII. Ledger stays verifiable.
+
+    Irreversible. Requires an explicit ``?confirm=true`` so a stray request can't mass-shred cases.
+    """
     _owned_case(request, case_id, principal)  # tenant check (404 cross-tenant)
-    return _orchestrator(request).erase_case(case_id)
+    if not confirm:
+        raise HTTPException(
+            status_code=400, detail="erasure is irreversible; resend with ?confirm=true"
+        )
+    return await _orchestrator(request).erase_case(case_id)
 
 
 def _owned_approval(request: Request, approval_id: str, principal: Principal) -> dict[str, Any]:

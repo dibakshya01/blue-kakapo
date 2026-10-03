@@ -78,11 +78,22 @@ class UserStore:
     def delete(self, user_id: str) -> None:
         self.store.delete_user(user_id)
 
-    def is_active(self, tenant_id: str, username: str) -> bool:
+    def is_active(
+        self, tenant_id: str, username: str | None = None, *, external_id: str | None = None
+    ) -> bool:
         """True if the user is unknown (not provisioned) OR provisioned-and-active.
 
-        Unknown users aren't blocked here (token/OIDC auth already vouched for them); only an
-        explicitly-deprovisioned user is denied.
+        Resolves the SCIM record by a **stable identifier** — the IdP subject (``external_id``) first,
+        then ``userName`` — never by display name, so a deprovision cascades regardless of whether the
+        token carries a ``name`` claim (Entra/Okta/Google default). Unknown users aren't blocked here
+        (token/OIDC auth already vouched for them); only an explicitly-deprovisioned user is denied.
         """
-        row = self.store.get_user_by_username(tenant_id, username)
-        return True if row is None else bool(row["active"])
+        if external_id:
+            row = self.store.get_user_by_external_id(tenant_id, external_id)
+            if row is not None:
+                return bool(row["active"])
+        if username:
+            row = self.store.get_user_by_username(tenant_id, username)
+            if row is not None:
+                return bool(row["active"])
+        return True

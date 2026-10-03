@@ -69,3 +69,14 @@ class FolderMemoryBackend:
 
     async def count(self, tenant_id: str) -> int:
         return len(await self.all(tenant_id))
+
+    async def delete_by_case(self, tenant_id: str, case_id: str) -> int:
+        records = self._load()
+        doomed = [
+            rid for rid, r in records.items() if r.tenant_id == tenant_id and r.case_id == case_id
+        ]
+        for rid in doomed:
+            del records[rid]
+        if doomed:
+            self._write(records)
+        return len(doomed)

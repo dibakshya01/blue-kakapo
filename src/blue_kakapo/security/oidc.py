@@ -31,7 +31,16 @@ class OIDCVerifier:
         roles_claim: str = "roles",
         default_tenant: str = "default",
         jwks: dict[str, Any] | None = None,
+        insecure_skip_aud: bool = False,
     ) -> None:
+        # Fail closed at the verifier level (not just config): without an expected audience, a token
+        # minted for another relying party on the same issuer would be accepted (confused deputy).
+        # Skipping audience must be an explicit, named opt-in — never a silent default.
+        if audience is None and not insecure_skip_aud:
+            raise OIDCError(
+                "OIDCVerifier requires an audience; pass insecure_skip_aud=True only if you "
+                "genuinely accept tokens for any audience on this issuer."
+            )
         self.issuer = issuer
         self.jwks_url = jwks_url
         self.audience = audience
@@ -73,6 +82,7 @@ class OIDCVerifier:
             id=str(claims.get("sub", "unknown")),
             tenant_id=str(claims.get(self.tenant_claim, self.default_tenant)),
             roles=list(roles) or ["viewer"],
+            username=claims.get("preferred_username") or claims.get("email"),
             display_name=claims.get("name") or claims.get("preferred_username"),
             auth_method="oidc",
         )

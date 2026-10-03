@@ -22,7 +22,19 @@ from blue_kakapo.security import (
     Role,
     permissions_for,
 )
+from blue_kakapo.security.oidc import OIDCError
 from blue_kakapo.security.scim import UserStore
+
+
+def _rsa_jwt_with(**claims: object) -> tuple[str, dict]:
+    """Mint a signed RS256 JWT with arbitrary claims + its JWKS (for adversarial OIDC tests)."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pub_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+    pub_jwk["kid"] = "k1"
+    now = _dt.datetime.now(_dt.UTC)
+    base = {"iss": "https://idp.example", "iat": now, "exp": now + _dt.timedelta(hours=1)}
+    token = jwt.encode({**base, **claims}, key, algorithm="RS256", headers={"kid": "k1"})
+    return token, {"keys": [pub_jwk]}
 
 
 def test_role_permissions() -> None:
@@ -105,6 +117,46 @@ def test_scim_deprovision_cascades_to_auth() -> None:
     users.set_active(rec["id"], False)
     with pytest.raises(AuthError, match="deprovisioned"):
         auth.authenticate(f"Bearer {token}")
+
+
+# round-2 🟡-M2 — the audience fail-closed must live in the verifier, not only in config.
+def test_oidc_verifier_refuses_audienceless_construction() -> None:
+    with pytest.raises(OIDCError, match="audience"):
+        OIDCVerifier(issuer="https://idp.example", jwks_url="x")  # no audience, no opt-in
+    # Explicit opt-in is allowed (documented air-gap escape hatch).
+    OIDCVerifier(issuer="https://idp.example", jwks_url="x", insecure_skip_aud=True)
+
+
+# round-2 🟡-M2 — an audience-less verifier must NOT accept a token minted for another audience.
+def test_oidc_rejects_wrong_audience_even_via_set_oidc() -> None:
+    token, jwks = _rsa_jwt_with(sub="u-9", aud="some-OTHER-app", tenant="victim", roles=["admin"])
+    auth = Authenticator(Settings(auth_enabled=True))
+    # Correct verifier (bound to our audience) rejects the foreign-audience token.
+    auth.set_oidc(
+        OIDCVerifier(issuer="https://idp.example", jwks_url="x", audience="blue-kakapo", jwks=jwks)
+    )
+    with pytest.raises(AuthError):
+        auth.authenticate(f"Bearer {token}")
+
+
+# round-2 🟡-M3 — deprovision cascades even when the token carries a `name` claim (Entra/Okta default).
+def test_scim_deprovision_cascades_with_name_claim() -> None:
+    token, jwks = _rsa_jwt_with(
+        sub="u-777", preferred_username="jdoe", name="John Doe", tenant="acme", aud="blue-kakapo"
+    )
+    store = Store.in_memory()
+    users = UserStore(store)
+    auth = Authenticator(Settings(auth_enabled=True))
+    auth.set_oidc(
+        OIDCVerifier(issuer="https://idp.example", jwks_url="x", audience="blue-kakapo", jwks=jwks)
+    )
+    auth.set_user_store(users)
+
+    rec = users.provision(tenant_id="acme", username="jdoe", roles=["analyst"], external_id="u-777")
+    assert auth.authenticate(f"Bearer {token}").id == "u-777"  # active
+    users.set_active(rec["id"], False)
+    with pytest.raises(AuthError, match="deprovisioned"):
+        auth.authenticate(f"Bearer {token}")  # name claim no longer masks the deprovision
 
 
 def test_env_secret_store(monkeypatch: pytest.MonkeyPatch) -> None:

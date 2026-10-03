@@ -419,3 +419,49 @@ the blast-radius guard; `contains_unsafe_output` is now live (was dead code).
 **Not changed (accepted/roadmap):** WS token in query string (browsers can't set WS headers; tenant
 still enforced); per-tenant provider/memory backends (documented as process-global); MCP fingerprint
 field coverage. Carried into round 2.
+
+### Round 2 ✅ (2026-10-03) — fresh memory-free adversarial reviewer
+
+Reviewer reproduced everything empirically (forged RS256 JWTs, concurrency harness). Confirmed
+round-1 fixes #2 (two-person gate on every asset) and #3 (maker-checker, proposer≠checker) **hold
+under adversarial testing**, the Guardian is genuinely the sole connector path, tenant isolation
+returns 404 (no oracle), ledger verifies after erase, eval harness is honest, injection regexes are
+ReDoS-safe, CI has no injection surface. But it found round-1 fix #1 was **half-done** plus moderates.
+All fixed with fail-before/pass-after tests. **150 tests**, `ruff`/`format`/`mypy` (75 files) clean.
+
+**🔴 C1 — crypto-shred was incomplete (ship-blocker, fixed).** `normalize_alert` promotes raw text
+into cleartext `title`/`message`/`rule_name` + USER/EMAIL observables; round-1 only tokenized `.raw`,
+so PII in an alert's title/description was stored plaintext **and survived `erase`**. My own regression
+test used a *clean* title, masking it. Fixed: `erase_case_pii` now scrubs emails/SSNs + the case's own
+PII values out of **every** free-text field (title, alert titles, rule_name, event messages, evidence
+summaries, verdict rationale) in addition to shredding raw blobs and redacting observables/entities;
+added `redact_pii_text`. Docs reworded to the honest split (raw never stored in clear; free-text
+readable while live, fully scrubbed on erasure). Test:
+`test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase` now plants PII in title+message+user.
+
+**🟡 M1 — erasure ignored derived memory.** `compact_case` stores `case.title`+rationale in the memory
+store; `erase_case` never touched it. Fixed: added `MemoryBackend.delete_by_case` (folder + sql),
+`MemoryService.forget_case`, and `erase_case` now purges the case's memory records. Test:
+`test_erasure_purges_derived_memory`.
+
+**🟡 M2 — `set_oidc` bypassed the audience fail-closed.** The guard lived only in `Authenticator.__init__`;
+an audience-less verifier injected via `set_oidc` accepted a token minted for another relying party.
+Fixed: `OIDCVerifier.__init__` refuses `audience=None` unless an explicit `insecure_skip_aud=True`.
+Tests: `test_oidc_verifier_refuses_audienceless_construction`, `test_oidc_rejects_wrong_audience_even_via_set_oidc`.
+
+**🟡 M3 — SCIM deprovision didn't cascade for typical IdPs.** `_check_active` keyed on `display_name`,
+which OIDC sets from the `name` claim (Entra/Okta/Google default) → deprovisioned users still
+authenticated. Fixed: resolve by **stable ids** — OIDC `sub`↔SCIM `external_id` first, then
+`preferred_username`↔`userName`, never display name; added `Principal.username` +
+`store.get_user_by_external_id`. Test: `test_scim_deprovision_cascades_with_name_claim`.
+
+**🟡 M4 — benign-keyword stuffing could force `auto_close`.** Padding threat text with "false positive /
+known good" at low severity hit the benign branch. Fixed: a strong-threat veto — a known-bad
+indicator, suspicious keywords, or injection markers now force ESCALATE over any AUTO_CLOSE, on both
+the deterministic and LLM paths. Test: `test_benign_keyword_stuffing_cannot_force_auto_close`.
+
+**⚪ Minors (fixed):** local token principal id now a stable SHA-256 prefix (was `token[:6]`, which
+collided → false duplicate-approver rejection); ingest body size cap (413); erase requires
+`?confirm=true`; README test count; documented responder-role separation + multi-process approval
+row-locking (guardian.md + a code comment). Dead-code `reveal`/replay left as the erasure-verification
+mechanism (not overclaimed).

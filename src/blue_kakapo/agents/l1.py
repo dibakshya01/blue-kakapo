@@ -206,11 +206,15 @@ def deterministic_triage(case: Case) -> tuple[Verdict, list[Evidence]]:
         vclass, routing, conf = VerdictClass.INCONCLUSIVE, RoutingDisposition.ESCALATE, 0.4
         rationale = "Insufficient signal to clear; escalating out of caution."
 
-    # Never auto-close an alert carrying injection markers — a crafted "benign" story could be the
-    # attack. Escalate to a human instead.
-    if injection_hits and routing == RoutingDisposition.AUTO_CLOSE:
+    # Strong-threat veto: never auto-close when explicit threat signals are present — a known-bad
+    # indicator, suspicious keywords, or injection markers. This defeats benign-keyword stuffing
+    # (an attacker padding threat text with "false positive / known good" to force a close) and
+    # honors the stated bias: never auto-close a real threat. A benign-keyword story co-occurring
+    # with threat keywords is exactly the case a human must see.
+    if (malicious > 0 or susp_kw or injection_hits) and routing == RoutingDisposition.AUTO_CLOSE:
         routing = RoutingDisposition.ESCALATE
-        rationale += " Injection markers present — escalated rather than auto-closed."
+        reason = "injection markers" if injection_hits else "explicit threat signals"
+        rationale += f" Escalated rather than auto-closed ({reason} present)."
 
     verdict = Verdict(
         verdict_class=vclass,
@@ -269,8 +273,13 @@ async def triage(
     if contains_unsafe_output(rationale):
         rationale = "[rationale withheld: model output contained unsafe markup/command content]"
     routing = llm_verdict.routing
-    # Injection markers override any model attempt to auto-close (defense-in-depth over the LLM path).
-    if scan_injection(_untrusted_text(case)) and routing == RoutingDisposition.AUTO_CLOSE:
+    # Defense-in-depth over the LLM path: an objective known-bad indicator or an injection marker
+    # overrides any model attempt to auto-close. The model may downgrade severity, but it can't
+    # silently close an alert that matched a known-bad indicator or carries injection.
+    has_known_bad = any(e.supports == "malicious" for e in evidence)
+    if (has_known_bad or scan_injection(_untrusted_text(case))) and (
+        routing == RoutingDisposition.AUTO_CLOSE
+    ):
         routing = RoutingDisposition.ESCALATE
     merged = Verdict(
         verdict_class=llm_verdict.verdict_class,

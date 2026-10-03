@@ -7,6 +7,8 @@ tokens first, then verified as an OIDC JWT. There is no anonymous access once au
 
 from __future__ import annotations
 
+import hashlib
+
 from ..config import Settings
 from .oidc import OIDCError, OIDCVerifier
 from .principal import Principal, open_principal
@@ -22,7 +24,9 @@ def _parse_token_spec(spec: str) -> tuple[str, Principal]:
     token = parts[0]
     tenant = parts[1] if len(parts) > 1 and parts[1] else "default"
     roles = parts[2].split("|") if len(parts) > 2 and parts[2] else ["analyst"]
-    pid = f"token:{token[:6]}…"
+    # Stable id from the WHOLE token (not a 6-char prefix, which collided — two tokens sharing a
+    # prefix would collapse to one approver id and wrongly trip the duplicate-approver rule).
+    pid = f"token:{hashlib.sha256(token.encode()).hexdigest()[:12]}"
     return token, Principal(id=pid, tenant_id=tenant, roles=roles, auth_method="local")
 
 
@@ -64,9 +68,14 @@ class Authenticator:
 
     def _check_active(self, principal: Principal) -> Principal:
         if self._user_store is not None:
-            username = principal.display_name or principal.id
-            if not self._user_store.is_active(principal.tenant_id, username):  # type: ignore[attr-defined]
-                raise AuthError(f"user {username!r} is deprovisioned")
+            # Resolve by STABLE ids (subject + userName), never the display name.
+            active = self._user_store.is_active(  # type: ignore[attr-defined]
+                principal.tenant_id,
+                principal.username,
+                external_id=principal.id,
+            )
+            if not active:
+                raise AuthError(f"user {principal.username or principal.id!r} is deprovisioned")
         return principal
 
     @staticmethod

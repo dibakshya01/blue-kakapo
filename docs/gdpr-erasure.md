@@ -4,22 +4,29 @@ An append-only, hash-chained ledger and a right-to-erasure look contradictory. b
 them with **crypto-shredding**.
 
 ## How it works
-- **Raw payloads are tokenized at ingest.** Before a case is ever persisted, each raw alert/event
-  payload — the free-text bucket where arbitrary PII (SSNs, notes, emails with no normalized home)
-  lands — is encrypted with a **per-record AES-256-GCM key** and replaced in the stored case by an
-  opaque `{_pii_ref: <token>}` reference. The case at rest holds a token, not the raw PII. *(Verified
-  by `tests/test_attack_suite.py::test_raw_pii_is_tokenized_at_rest_and_erasable`.)*
-- **Normalized observables are flagged, then redacted on erasure.** Values we deliberately extract for
-  triage, correlation, and entity resolution (usernames, emails) are kept in the clear *while a case
-  is live* — triage can't reason over ciphertext — but are flagged `contains_pii`. A subject-erasure
-  redacts them (and resolved PII entities) in place.
+
+Personal data in a case lives on two surfaces, and we handle each honestly:
+
+- **Raw payloads — tokenized at ingest.** Before a case is ever persisted, each raw alert/event
+  payload (the free-text bucket where arbitrary PII — SSNs, notes, emails with no normalized home —
+  lands) is encrypted with a **per-record AES-256-GCM key** and replaced in the stored case by an
+  opaque `{_pii_ref: <token>}` reference. The raw payload is **never persisted in the clear**.
+- **Normalized free-text + observables — readable while live, scrubbed on erasure.** The fields triage
+  and the UI need (`title`, `message`, `rule_name`, evidence summaries, verdict rationale) and the
+  extracted USER/EMAIL observables are kept in the clear *while a case is live* — triage and
+  correlation can't reason over ciphertext. We do **not** claim these are PII-free at rest.
 - **The ledger carries no PII** — only action strings, dispositions, and tokenized refs — so it keeps
   verifying across an erasure.
-- **An erasure request** (`POST /api/cases/{id}/erase`, admin-gated) **destroys the raw blobs' keys**
-  (crypto-shred, unrecoverable) **and redacts the flagged observables/entities**, while the hash
-  chain still verifies. The erasure itself is recorded as a `case.erased` ledger entry.
 
-For a stronger guarantee (remove the case entirely), hard-delete the case document — the PII-free
+**A subject-erasure** (`POST /api/cases/{id}/erase?confirm=true`, admin-gated) removes personal data
+from **every field of the stored case**: it crypto-shreds the raw blobs' keys (unrecoverable),
+redacts the flagged observables + resolved PII entities, and scrubs emails/SSNs and the case's own PII
+values out of all the free-text fields — then **deletes any memory records derived from the case**.
+The hash chain still verifies, and the erasure is recorded as a `case.erased` ledger entry. *(Verified
+by `tests/test_attack_suite.py::test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase` and
+`::test_erasure_purges_derived_memory`.)*
+
+For a stronger guarantee (remove the record entirely), hard-delete the case document — the PII-free
 ledger survives and still verifies on its own.
 
 ## Operator responsibilities (honest limits)

@@ -32,7 +32,7 @@
 | **Idea** | A swarm of specialized agents does the Tier-1 first pass — fast **and** transparent. |
 | **What's inside** | 14 agents + orchestrator · Guardian safety gate · replayable crypto-shred ledger · opt-in memory · model-agnostic gateway. |
 | **How it works** | Deterministic spine, bounded LLM reasoning, every action gated and recorded. |
-| **Proof** | 138 tests, an adversarial suite, and an eval harness that reports the **false-negative rate** — no unaudited numbers. |
+| **Proof** | 150+ tests, an adversarial suite, and an eval harness that reports the **false-negative rate** — no unaudited numbers. |
 | **Get started** | `uv sync && uv run bk serve` — offline, no API key, data stays local. |
 
 <div align="center"><img src="docs/assets/dashboard.jpg" alt="blue-kakapo coworker dashboard — a malicious verdict with cited cross-agent evidence and a verified ledger trail" width="820" /></div>

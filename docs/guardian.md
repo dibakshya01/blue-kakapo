@@ -28,3 +28,11 @@ Everything — request, each grant, the final execution — is ledgered.
 Write policies in the built-in typed DSL or bring **OPA/Rego**. Asset criticality comes from the
 [asset inventory](architecture.md). The Guardian also enforces the **Rule of Two** and treats all
 tool/alert content as data.
+
+## Operator notes (honest limits)
+- The shipped `responder` role holds both `propose_response` and `approve_response`. Two-person
+  control still holds for high-impact actions (two **distinct** principals required), but for a
+  multi-analyst SOC, split proposing and approving across roles.
+- Approval counting is correct for the single-process deployment (status is persisted before the
+  connector call; actions carry an idempotency key). A multi-replica/Postgres deployment should add
+  row-level locking (`SELECT … FOR UPDATE`) before counting an approval.

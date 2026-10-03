@@ -81,6 +81,10 @@ class MemoryService:
     def needs_reembed(self, record: MemoryRecord) -> bool:
         return record.embedding_model != self.gateway.embedding_model_id()
 
+    async def forget_case(self, tenant_id: str, case_id: str) -> int:
+        """Delete every memory record derived from a case (for GDPR erasure). Returns the count."""
+        return await self.backend.delete_by_case(tenant_id, case_id)
+
     async def recall(
         self,
         tenant_id: str,

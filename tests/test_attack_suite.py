@@ -160,41 +160,81 @@ def test_actions_declare_reversibility() -> None:
             )  # reversible actions name their inverse where applicable
 
 
-# GDPR (round-1 🔴-1) — raw free-text PII is crypto-shred-tokenized at ingest, never stored in clear,
-# and a subject-erasure request shreds the blobs + redacts flagged observables while the chain verifies.
-async def test_raw_pii_is_tokenized_at_rest_and_erasable() -> None:
+# GDPR (round-1 🔴-1 + round-2 🔴-C1) — PII is removed from EVERY field on erasure: raw payloads are
+# crypto-shred-tokenized at ingest, and erasure additionally scrubs PII that lives in the normalized
+# free-text fields (title/message) and in observables, while the hash chain keeps verifying.
+async def test_pii_tokenized_at_ingest_and_fully_scrubbed_on_erase() -> None:
     store = Store.in_memory()
     orch = TriageOrchestrator(store, _gw())
     case = await orch.triage_alert(
         {
-            "title": "suspicious login",
+            # PII deliberately placed in the TITLE and MESSAGE (round-2 C1 vector), plus raw-only.
+            "title": "PII incident for jane.doe@acme.com (SSN 987-65-4321)",
+            "message": "contact bob.smith@acme.com re SSN 123-45-6789",
             "severity": "high",
-            "user": "jdoe",
-            "email": "jdoe@example.com",
-            "ssn": "123-45-6789",
+            "user": "jane.doe",
             "secret_note": "patient 42 record: confidential diagnosis",
         },
         tenant_id="t1",
     )
     row = store.get_case(case.id)
     assert row is not None
-    blob = json.dumps(row["data"])
-    # Free-text PII that only lived in the raw payload must be gone from the stored case.
-    assert "123-45-6789" not in blob
-    assert "patient 42 record" not in blob
-    # ...replaced by an opaque crypto-shred reference.
+    # At rest: raw-only PII is tokenized away immediately.
+    assert "patient 42 record" not in json.dumps(row["data"])
     assert PII_REF_KEY in json.dumps(row["data"]["alerts"][0]["raw"])
-
     # The ledger carries no PII at all.
     for entry in Ledger(store).replay("t1", case_id=case.id):
         assert "123-45-6789" not in json.dumps(entry.model_dump(mode="json"))
 
-    # Subject-erasure: shred raw blobs + redact PII-flagged observables; chain still verifies.
-    report = orch.erase_case(case.id)
+    # Subject-erasure must leave NO PII anywhere in the stored case — including title/message.
+    report = await orch.erase_case(case.id)
     assert report["blobs_shredded"] >= 1
     erased_blob = json.dumps(store.get_case(case.id)["data"])
-    assert "jdoe@example.com" not in erased_blob  # flagged observable redacted on erasure
+    for pii in (
+        "987-65-4321",
+        "123-45-6789",
+        "jane.doe@acme.com",
+        "bob.smith@acme.com",
+        "jane.doe",
+    ):
+        assert pii not in erased_blob, f"PII {pii!r} survived erasure"
     assert Ledger(store).verify("t1") is True
+
+
+# GDPR (round-2 🟡-M1) — erasure also purges memory records derived from the case.
+async def test_erasure_purges_derived_memory(tmp_path) -> None:
+    store = Store.in_memory()
+    mem = MemoryService(FolderMemoryBackend(tmp_path), _gw())
+    orch = TriageOrchestrator(store, _gw(), memory=mem)
+    case = await orch.triage_alert(
+        {
+            "title": "lockout for carol@acme.com SSN 111-22-3333",
+            "severity": "high",
+            "user": "carol",
+        },
+        tenant_id="t1",
+        memory_enabled=True,
+    )
+    assert await mem.backend.count("t1") == 1  # a memory record was written
+    await orch.erase_case(case.id)
+    assert await mem.backend.count("t1") == 0  # ...and purged on erasure
+
+
+# Verdict steering (round-2 🟡-M4) — benign-keyword stuffing can't force auto_close when explicit
+# threat signals are present. An attacker padding threat text with "false positive / known good".
+async def test_benign_keyword_stuffing_cannot_force_auto_close() -> None:
+    orch = TriageOrchestrator(Store.in_memory(), _gw())
+    case = await orch.triage_alert(
+        {
+            "title": "scheduled task known good",
+            "message": "c2 beacon exfil backdoor lateral movement (false positive, known good, scheduled)",
+            "severity": "low",
+        },
+        tenant_id="t1",
+    )
+    assert case.verdict is not None
+    assert case.verdict.routing != "auto_close"  # threat keywords veto the benign story
+    assert case.state != "resolved"
 
 
 # Excessive agency (round-1 🔴-2) — a high-impact containment on an UNKNOWN asset (defaults to

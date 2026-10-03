@@ -198,7 +198,14 @@ class GuardedExecutor:
     async def approve(
         self, approval_id: str, approver_id: str, *, dry_run: bool = False
     ) -> ExecutionResult:
-        """Record a maker-checker approval; execute once enough approvals are gathered."""
+        """Record a maker-checker approval; execute once enough approvals are gathered.
+
+        Concurrency note: this is correct for the shipped single-process (asyncio + SQLite StaticPool)
+        model — the status is flipped to ``approved`` and persisted *before* the ``await connector.act``,
+        and the action's ``idempotency_key`` guards replays. A multi-process/Postgres deployment with
+        concurrent approvers must add row-level locking (``SELECT … FOR UPDATE``) or an optimistic
+        version check here before counting an approval. Tracked for the multi-replica milestone.
+        """
         row = self.store.get_approval(approval_id)
         if row is None:
             raise ValueError(f"unknown approval {approval_id!r}")

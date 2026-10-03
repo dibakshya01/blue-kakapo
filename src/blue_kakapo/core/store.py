@@ -439,6 +439,10 @@ class Store:
             row = conn.execute(select(memory).where(memory.c.id == record_id)).mappings().first()
             return dict(row) if row else None
 
+    def delete_memory(self, record_id: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(delete(memory).where(memory.c.id == record_id))
+
     def query_memory(
         self, tenant_id: str, filters: dict[str, str] | None = None, limit: int = 1000
     ) -> list[dict[str, Any]]:
@@ -471,6 +475,19 @@ class Store:
                 conn.execute(
                     select(users).where(
                         users.c.tenant_id == tenant_id, users.c.username == username
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return dict(row) if row else None
+
+    def get_user_by_external_id(self, tenant_id: str, external_id: str) -> dict[str, Any] | None:
+        with self.engine.begin() as conn:
+            row = (
+                conn.execute(
+                    select(users).where(
+                        users.c.tenant_id == tenant_id, users.c.external_id == external_id
                     )
                 )
                 .mappings()
