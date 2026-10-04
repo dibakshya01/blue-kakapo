@@ -235,4 +235,84 @@
       });
     });
   }
+
+  // --- Interactive 14-agent roster (each agent's AgBOM + Rule-of-Two, from the real roster) ---
+  // r2 legs: [untrusted_input, sensitive_access, external_state_change] — an agent must break >=1.
+  var ROSTER = [
+    { n: "L1", g: "core", role: "Triage & intake — an evidence-cited verdict", au: "propose",
+      tools: ["builtin-intel", "severity-heuristics", "provider-gateway"], sc: ["alert:read"], r2: [1,0,0] },
+    { n: "INTEL", g: "core", role: "Adversary context — IOC intel + ATT&CK tactics", au: "propose",
+      tools: ["threat-intel", "attack-map"], sc: ["intel:read"], r2: [1,0,0] },
+    { n: "L2", g: "core", role: "Investigation — connector enrich + SIEM query", au: "propose",
+      tools: ["connector.enrich", "connector.query"], sc: ["siem:read", "alert:read"], r2: [1,1,0] },
+    { n: "FUSION", g: "core", role: "Campaign correlation by shared entities", au: "propose",
+      tools: ["entity-graph"], sc: ["case:read"], r2: [1,0,0] },
+    { n: "RESP", g: "core", role: "Containment — Guardian-gated, two-person", au: "act-on-approval",
+      tools: ["connector.act (via Guardian)"], sc: ["case:read"], r2: [0,1,1] },
+    { n: "WATCH", g: "proactive", role: "Early warning — bursts + shared-indicator campaigns", au: "propose",
+      tools: ["case-stream", "indicator-correlation", "provider-gateway"], sc: ["case:read"], r2: [1,0,0] },
+    { n: "HUNT", g: "proactive", role: "Hypothesis-driven hunting", au: "propose",
+      tools: ["connector.query", "hypothesis-gen", "provider-gateway"], sc: ["siem:read"], r2: [1,1,0] },
+    { n: "DET", g: "proactive", role: "Detection gaps + proposed Sigma", au: "propose",
+      tools: ["detection-inventory", "sigma-gen", "provider-gateway"], sc: ["detections:read"], r2: [0,0,0] },
+    { n: "VULN", g: "proactive", role: "Exposure — KEV/CVSS × asset × threat", au: "propose",
+      tools: ["vuln-feed", "asset-inventory", "provider-gateway"], sc: ["vuln:read", "asset:read"], r2: [0,0,0] },
+    { n: "INSIDER", g: "proactive", role: "Privacy-gated insider-risk signal", au: "propose",
+      tools: ["ueba-heuristics", "provider-gateway"], sc: ["user-activity:read (minimized)"], r2: [1,1,0] },
+    { n: "COMMS", g: "ops", role: "Summaries + drafted external messages (never auto-sent)", au: "propose",
+      tools: ["summarizer", "provider-gateway"], sc: ["case:read"], r2: [0,0,0] },
+    { n: "RPT", g: "ops", role: "Incident & compliance reporting", au: "propose",
+      tools: ["report-builder", "provider-gateway"], sc: ["case:read", "ledger:read"], r2: [0,1,0] },
+    { n: "MAINT", g: "ops", role: "Connector / pipeline health", au: "propose",
+      tools: ["health-probe", "provider-gateway"], sc: ["connector:read"], r2: [0,1,0] },
+    { n: "MGR", g: "ops", role: "Runs the shift — SLA + regulatory clocks", au: "propose",
+      tools: ["sla-clocks", "prioritizer", "provider-gateway"], sc: ["case:read"], r2: [0,0,0] },
+  ];
+  var GROUPS = { core: "Triage core", proactive: "Proactive", ops: "Service ops" };
+  var LEGS = ["untrusted-in", "sensitive", "state-change"];
+
+  var rlist = document.getElementById("rosterList");
+  var rdetail = document.getElementById("rosterDetail");
+  if (rlist && rdetail) {
+    var html = "";
+    ["core", "proactive", "ops"].forEach(function (g) {
+      html += '<div class="rgroup">' + GROUPS[g] + "</div><div class=\"rtiles\">";
+      ROSTER.forEach(function (a, i) {
+        if (a.g !== g) return;
+        html += '<button class="atile" data-i="' + i + '" role="tab"><span class="an">' + a.n +
+          '</span><span class="aau ' + (a.au === "act-on-approval" ? "warn" : "") + '">' + a.au + "</span></button>";
+      });
+      html += "</div>";
+    });
+    rlist.innerHTML = html;
+
+    function chips(arr) { return arr.map(function (t) { return '<span class="rchip">' + t + "</span>"; }).join(""); }
+    function showAgent(a) {
+      var broken = a.r2.filter(function (x) { return !x; }).length;
+      var legs = LEGS.map(function (l, i) {
+        return '<span class="leg ' + (a.r2[i] ? "on" : "") + '">' + l + "</span>";
+      }).join("");
+      rdetail.innerHTML =
+        '<div class="rd-head"><span class="rd-name">' + a.n + '</span><span class="aau ' +
+        (a.au === "act-on-approval" ? "warn" : "") + '">' + a.au + "</span></div>" +
+        '<p class="rd-role">' + a.role + "</p>" +
+        '<div class="rd-k">tools</div><div class="rd-chips">' + chips(a.tools) + "</div>" +
+        '<div class="rd-k">data scopes</div><div class="rd-chips">' + chips(a.sc) + "</div>" +
+        '<div class="rd-k">rule of two</div><div class="rd-legs">' + legs + "</div>" +
+        '<div class="rd-note">' + (broken < 3 ? "✓ breaks " + broken + " of 3 legs — safe by construction"
+          : "✓ all three legs broken") + "</div>";
+    }
+    var tiles = rlist.querySelectorAll(".atile");
+    tiles.forEach(function (t) {
+      var pick = function () {
+        tiles.forEach(function (x) { x.classList.remove("active"); });
+        t.classList.add("active");
+        showAgent(ROSTER[parseInt(t.getAttribute("data-i"), 10)]);
+      };
+      t.addEventListener("click", pick);
+      t.addEventListener("mouseenter", pick);
+    });
+    tiles[0].classList.add("active");
+    showAgent(ROSTER[0]);
+  }
 })();

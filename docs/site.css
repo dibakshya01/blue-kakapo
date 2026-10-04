@@ -291,8 +291,33 @@ header.nav.scrolled { box-shadow: 0 10px 30px rgba(0,0,0,.4); background: rgba(1
 .vbadge.v-amber { color: var(--amber); border-color: var(--amber); }
 .vbadge.v-green { color: var(--green); border-color: var(--green); }
 
+/* ---- Interactive 14-agent roster ---- */
+.roster h2 { margin-top: 6px; }
+.roster-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; margin-top: 26px; align-items: start; }
+.rgroup { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 10px 2px 8px; }
+.rtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.atile { display: flex; flex-direction: column; gap: 3px; text-align: left; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 11px; cursor: pointer; color: var(--text); transition: border-color .18s, background .18s, transform .12s; }
+.atile:hover { transform: translateY(-2px); border-color: var(--line2); }
+.atile.active { border-color: var(--accent); background: rgba(53,224,161,.08); }
+.atile .an { font-family: var(--display); font-weight: 600; font-size: 0.92rem; }
+.aau { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); }
+.aau.warn { color: var(--amber); }
+
+.roster-detail { padding: 20px; min-height: 230px; }
+.rd-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rd-name { font-family: var(--display); font-weight: 700; font-size: 1.5rem; }
+.rd-role { color: #cfd8e3; margin: 8px 0 14px; }
+.rd-k { font-family: var(--mono); font-size: 0.68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 10px; }
+.rd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rchip { font-family: var(--mono); font-size: 0.72rem; color: #cfd8e3; background: var(--surface2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 8px; }
+.rd-legs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rd-legs .leg { font-family: var(--mono); font-size: 0.68rem; padding: 3px 9px; border-radius: 20px; border: 1px dashed var(--line2); color: var(--muted); text-decoration: line-through; opacity: .7; }
+.rd-legs .leg.on { border-style: solid; border-color: var(--amber); color: var(--amber); text-decoration: none; opacity: 1; }
+.rd-note { margin-top: 12px; font-size: 0.8rem; color: var(--accent); }
+
 @media (max-width: 820px) {
-  .demo-grid { grid-template-columns: 1fr; }
+  .demo-grid, .roster-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

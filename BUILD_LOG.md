@@ -570,3 +570,34 @@ documented scope; hard-delete is the stronger guarantee.
 findings; round 5 came back essentially clean).** Final: **153 tests**, `ruff` + `ruff format` +
 `mypy` (75 files) + `tsc`/`vite` all clean. Every round's findings + fixes are logged above; every fix
 carries a fail-before/pass-after attack-test.
+
+---
+
+## Post-launch — deepen the full roster + interactive agent UI (2026-10-04)
+
+User asked to "finish the build": bring the 9 proactive/service-ops agents to the core depth bar, and
+surface all 14 agents on the landing page.
+
+**Agents deepened to the bar (WATCH/HUNT/DET/VULN/INSIDER + COMMS/RPT/MAINT/MGR):**
+- New `schema/findings.py` — typed, schema-validated output per agent (WatchSignal, HuntPlan,
+  DetectionGapReport, ExposureReport, InsiderSignal, CommsBrief, IncidentReport, PipelineHealth,
+  ShiftStatus). Every agent now returns a contract-checked finding under `metadata["finding"]`.
+- New `agents/reasoning.py` — shared `bounded_reason()` (deterministic-first → one bounded,
+  schema-validated LLM refinement → `ModelRef` cost; `(None, None)` offline/on-error) + `safe_text()`
+  (LLM10 output guard) + `finding_output()`. Lifts L1's pattern to the whole roster.
+- Richer deterministic logic: WATCH now does cross-case **shared-indicator campaign** detection (not
+  just bursts); VULN folds in **asset-criticality** weighting; DET **prioritizes** the in-case gap;
+  MGR computes a deterministic **priority** floor; INSIDER derives a graded **risk level** — all with
+  an optional LLM refinement on top. INSIDER's LLM sees only aggregate counts (data minimization).
+- AgBOMs updated (each deepened agent now lists `provider-gateway`). Rule-of-Two still enforced at
+  construction.
+
+**Tests:** rewrote `tests/test_full_roster.py` to the typed-finding contract + strengthened
+(WATCH campaign, HUNT pivot plan, DET priority gap, VULN top-CVE, INSIDER privacy invariant — asserts
+the username never appears in the finding/evidence, MGR priority). **154 tests**, `ruff` + `ruff
+format` + `mypy` (77 files) all clean.
+
+**Landing page — interactive 14-agent roster** (`#agents`): a two-pane section — 14 tiles grouped
+(Triage core / Proactive / Service ops), click/hover any to inspect its role, autonomy, tools, data
+scopes, and which **Rule-of-Two** legs it breaks. Client-side, reduced-motion-gated, responsive
+(stacks on mobile). Verified in-browser (L1 + RESP paths) and on deploy.

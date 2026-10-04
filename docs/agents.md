@@ -27,6 +27,16 @@ connectors, data scopes, permissions), an **autonomy level**, and satisfies the 
 confidence · 5. declared autonomy enforced by the Guardian · 6. ≥1 happy-path + adversarial tests ·
 7. documented limits.
 
+**All 14 meet this bar.** Every agent returns a **typed, schema-validated finding**
+(`blue_kakapo.schema.findings`, e.g. `HuntPlan`, `ExposureReport`, `InsiderSignal`) under
+`AgentOutput.metadata["finding"]`, built **deterministic-first**; when a real provider is configured
+each may run **one bounded, schema-validated LLM refinement** over that finding (shared
+`agents/reasoning.bounded_reason`), which is cost-tracked and **falls back to the deterministic result
+offline or on any error** — so offline mode is always fully functional. Honest scope: only the triage
+**Verdict** confidence is calibrated by the eval harness; the proactive/service-ops confidences are the
+agent's own estimate. INSIDER is data-minimized — its LLM step sees only aggregate counts, never
+identities.
+
 ## Flow
 Triage is read-only: `intake → L1 → (auto_close → resolve | escalate → INTEL + L2 + FUSION) → route`.
 Response is explicit and gated: `orchestrator.respond(case, dry_run)` runs **RESP** through the
